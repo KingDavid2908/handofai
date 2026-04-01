@@ -30,9 +30,9 @@ export namespace Database {
   export function getChannelPath() {
     const channel = Installation.CHANNEL
     if (["latest", "beta"].includes(channel) || Flag.OPENCODE_DISABLE_CHANNEL_DB)
-      return path.join(Global.Path.data, "opencode.db")
+      return path.join(Global.Path.data, "handofai.db")
     const safe = channel.replace(/[^a-zA-Z0-9._-]/g, "-")
-    return path.join(Global.Path.data, `opencode-${safe}.db`)
+    return path.join(Global.Path.data, `handofai-${safe}.db`)
   }
 
   export const Path = iife(() => {
@@ -110,6 +110,23 @@ export namespace Database {
         }
       }
       migrate(db, entries)
+    }
+
+    // Ensure FTS5 virtual table exists safely (Hermes probe-and-create pattern)
+    // CREATE VIRTUAL TABLE IF NOT EXISTS cannot reliably run inside executescript/migrate
+    try {
+      db.run("SELECT rowid FROM part_search LIMIT 0")
+    } catch {
+      try {
+        db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS part_search USING fts5(
+          content,
+          session_id,
+          message_id,
+          tokenize='porter unicode61'
+        )`)
+      } catch (e) {
+        log.warn("FTS5 table creation failed, search will be unavailable", { error: e })
+      }
     }
 
     return db

@@ -35,6 +35,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { DialogMemory } from "../dialog-memory"
 
 export type PromptProps = {
   sessionID?: string
@@ -519,6 +520,18 @@ export function Prompt(props: PromptProps) {
   }
 
   command.register(() => [
+    {
+      title: "Memory",
+      value: "memory",
+      keybind: "memory",
+      category: "Memory",
+      slash: {
+        name: "memory",
+      },
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogMemory />)
+      },
+    },
     {
       title: "Stash prompt",
       value: "prompt.stash",

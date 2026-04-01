@@ -1,0 +1,8 @@
+Search past sessions for relevant context. Use this when you need to recall information from previous conversations.
+
+Two modes:
+1. Recent sessions: Call without a query to get a list of recent sessions with titles and previews.
+2. Keyword search: Provide a query to search across all past session content using full-text search.
+
+Excludes the current session and its children (you already have that context).
+Returns session IDs, titles, timestamps, and content previews.

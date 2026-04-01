@@ -12,6 +12,8 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
+import { SessionSearchTool } from "./session-search"
+import { MemoryTool } from "./memory"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Config } from "../config/config"
@@ -129,6 +131,8 @@ export namespace ToolRegistry {
           TodoWriteTool,
           WebSearchTool,
           CodeSearchTool,
+          SessionSearchTool,
+          MemoryTool,
           SkillTool,
           ApplyPatchTool,
           ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),

@@ -1,0 +1,12 @@
+Manage persistent memory across sessions. Use this tool to save, update, or remove important information that should persist between conversations.
+
+Two memory targets:
+- "memory": Your personal notes about the project, tasks, technical decisions, and progress.
+- "user": Facts about the user — their preferences, working style, expectations, and personal details.
+
+Actions:
+- "add": Add a new entry. Will reject duplicates and entries that exceed the character limit.
+- "replace": Find an entry containing old_text and replace it with content. Errors if multiple entries match.
+- "remove": Find an entry containing old_text and remove it. Errors if multiple entries match.
+
+Keep entries concise and focused. Use this to remember important context that would be useful in future sessions.

@@ -1068,6 +1068,18 @@ export namespace Config {
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
+      memory: z
+        .object({
+          enabled: z.boolean().default(true).describe("Master toggle for memory system (default: true)"),
+          memory_enabled: z.boolean().default(true).describe("Enable MEMORY.md handling (default: true)"),
+          user_profile_enabled: z.boolean().default(true).describe("Enable USER.md handling (default: true)"),
+          nudge_interval: z.number().default(10).describe("Turns between automatic memory reviews (default: 10)"),
+          flush_min_turns: z.number().default(6).describe("Minimum turns before memory flush on compaction (default: 6)"),
+          memory_char_limit: z.number().default(2200).describe("Max chars for MEMORY.md (default: 2200)"),
+          user_char_limit: z.number().default(1375).describe("Max chars for USER.md (default: 1375)"),
+        })
+        .optional()
+        .describe("Memory system configuration for persistent cross-session learning"),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),
@@ -1116,7 +1128,7 @@ export namespace Config {
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Config") {}
 
   function globalConfigFile() {
-    const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
+    const candidates = ["handofai.jsonc", "handofai.json", "config.json"].map((file) =>
       path.join(Global.Path.config, file),
     )
     for (const file of candidates) {
@@ -1265,8 +1277,8 @@ export namespace Config {
           let result: Info = pipe(
             {},
             mergeDeep(yield* loadFile(path.join(Global.Path.config, "config.json"))),
-            mergeDeep(yield* loadFile(path.join(Global.Path.config, "opencode.json"))),
-            mergeDeep(yield* loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
+            mergeDeep(yield* loadFile(path.join(Global.Path.config, "handofai.json"))),
+            mergeDeep(yield* loadFile(path.join(Global.Path.config, "handofai.jsonc"))),
           )
 
           const legacy = path.join(Global.Path.config, "config")
@@ -1278,7 +1290,7 @@ export namespace Config {
                   if (provider && model) result.model = `${provider}/${model}`
                   result["$schema"] = "https://opencode.ai/config.json"
                   result = mergeDeep(result, rest)
-                  await fsNode.writeFile(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
+                  await fsNode.writeFile(path.join(Global.Path.config, "handofai.json"), JSON.stringify(result, null, 2))
                   await fsNode.unlink(legacy)
                 })
                 .catch(() => {}),
@@ -1357,8 +1369,8 @@ export namespace Config {
           const deps: Promise<void>[] = []
 
           for (const dir of unique(directories)) {
-            if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-              for (const file of ["opencode.jsonc", "opencode.json"]) {
+            if (dir.endsWith(".handofai") || dir === Flag.OPENCODE_CONFIG_DIR) {
+              for (const file of ["handofai.jsonc", "handofai.json"]) {
                 log.debug(`loading config from ${path.join(dir, file)}`)
                 result = mergeConfigConcatArrays(result, yield* loadFile(path.join(dir, file)))
                 result.agent ??= {}
@@ -1427,7 +1439,7 @@ export namespace Config {
           }
 
           if (existsSync(managedDir)) {
-            for (const file of ["opencode.jsonc", "opencode.json"]) {
+            for (const file of ["handofai.jsonc", "handofai.json"]) {
               result = mergeConfigConcatArrays(result, yield* loadFile(path.join(managedDir, file)))
             }
           }

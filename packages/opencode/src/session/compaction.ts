@@ -18,6 +18,13 @@ import { ModelID, ProviderID } from "@/provider/schema"
 import { Cause, Effect, Exit, Layer, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import { isOverflow as overflow } from "./overflow"
+import { MemoryStore } from "@/memory/memory-store"
+import { MemoryTool } from "@/tool/memory"
+import { ToolRegistry } from "@/tool/registry"
+import { LLM } from "./llm"
+import { Permission } from "@/permission"
+import { streamText, type ModelMessage, tool, jsonSchema } from "ai"
+import { ProviderTransform } from "@/provider/transform"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -81,8 +88,6 @@ export namespace SessionCompaction {
         return overflow({ cfg: yield* config.get(), tokens: input.tokens, model: input.model })
       })
 
-      // goes backwards through parts until there are PRUNE_PROTECT tokens worth of tool
-      // calls, then erases output of older tool calls to free context space
       const prune = Effect.fn("SessionCompaction.prune")(function* (input: { sessionID: SessionID }) {
         const cfg = yield* config.get()
         if (cfg.compaction?.prune === false) return
@@ -131,6 +136,84 @@ export namespace SessionCompaction {
         }
       })
 
+      // Memory flush: LLM-powered save-before-compaction using ONLY the memory tool
+      // Follows Hermes pattern: inject synthetic prompt, call LLM with only memory tool, execute tool calls, strip artifacts
+      async function memoryFlush(input: {
+        messages: MessageV2.WithParts[]
+        sessionID: SessionID
+        abort: AbortSignal
+      }) {
+        const sentinel = "__MEMORY_FLUSH_SENTINEL__"
+
+        // Get the compaction agent
+        const compactionAgent = await Agent.get("compaction").catch(() => Agent.get("default"))
+        if (!compactionAgent) return
+
+        // Get model from the last user message or compaction agent
+        const lastUser = input.messages.findLast((m) => m.info.role === "user")
+        const modelInfo = lastUser?.info && "model" in lastUser.info
+          ? (lastUser.info as any).model
+          : compactionAgent.model ?? { providerID: "opencode", modelID: "default" }
+
+        const model = await Provider.getModel(modelInfo.providerID, modelInfo.modelID).catch(() => null)
+        if (!model) return
+
+        // Build memory tool as AI SDK tool
+        const memoryToolInfo = await MemoryTool.init()
+        const memoryAITool = tool({
+          id: MemoryTool.id as any,
+          description: memoryToolInfo.description,
+          inputSchema: jsonSchema(z.toJSONSchema(memoryToolInfo.parameters) as any),
+          async execute(args: any, options) {
+            const result = await memoryToolInfo.execute(args, {
+              sessionID: input.sessionID,
+              messageID: MessageID.ascending(),
+              agent: compactionAgent.name,
+              abort: input.abort,
+              callID: options.toolCallId,
+              extra: { model, bypassAgentCheck: true },
+              messages: input.messages,
+              metadata: async () => {},
+              ask: async () => {},
+            })
+            return {
+              output: result.output,
+              metadata: result.metadata,
+            }
+          },
+        })
+
+        // Convert messages to model format
+        const modelMessages = await MessageV2.toModelMessages(input.messages, model, { stripMedia: true })
+
+        // Get the language model for the flush
+        const languageModel = await Provider.getLanguage(model).catch(() => null)
+        if (!languageModel) return
+
+        // Stream with ONLY the memory tool
+        const flushPrompt = `[System: The session is being compacted. Save anything worth remembering to memory before the conversation history is summarized. ${sentinel}]`
+        try {
+          const result = streamText({
+            model: languageModel,
+            messages: [
+              ...modelMessages,
+              { role: "user", content: [{ type: "text", text: flushPrompt }] },
+            ],
+            tools: { memory: memoryAITool },
+            abortSignal: input.abort,
+          })
+
+          // Consume the stream - tool calls are auto-executed by AI SDK
+          for await (const part of result.fullStream) {
+            // Just consume - memory tool calls execute automatically
+          }
+
+          log.info("memory flush completed")
+        } catch (e) {
+          log.error("memory flush failed", { error: e })
+        }
+      }
+
       const processCompaction = Effect.fn("SessionCompaction.process")(function* (input: {
         parentID: MessageID
         messages: MessageV2.WithParts[]
@@ -139,6 +222,27 @@ export namespace SessionCompaction {
         auto: boolean
         overflow?: boolean
       }) {
+        // Memory flush before compaction (Hermes pattern: LLM-powered save-before-compact)
+        if (MemoryStore.isInitialized()) {
+          const userTurns = input.messages.filter((m) => m.info.role === "user").length
+          const cfg = yield* config.get()
+          const flushMinTurns = cfg.memory?.flush_min_turns ?? 6
+          const effectiveMin = input.overflow ? 0 : flushMinTurns
+
+          if (userTurns >= effectiveMin && input.messages.length >= 3) {
+            log.info("flushing memories before compaction")
+            try {
+              yield* Effect.promise(() => memoryFlush({
+                messages: input.messages,
+                sessionID: input.sessionID,
+                abort: input.abort,
+              }))
+            } catch (e) {
+              log.error("memory flush failed", { error: e })
+            }
+          }
+        }
+
         const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
 
         let messages = input.messages
@@ -335,7 +439,13 @@ When constructing the summary, try to stick to this template:
         }
 
         if (processor.message.error) return "stop"
-        if (result === "continue") yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+        if (result === "continue") {
+          // Reload memory snapshots after compaction to capture any writes
+          if (MemoryStore.isInitialized()) {
+            yield* Effect.promise(() => MemoryStore.load())
+          }
+          yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+        }
         return result
       })
 

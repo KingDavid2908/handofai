@@ -59,6 +59,8 @@ import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
 import { createTuiApi, TuiPluginRuntime, type RouteMap } from "./plugin"
 import { FormatError, FormatUnknownError } from "@/cli/error"
+import { MemoryStore } from "@/memory/memory-store"
+import { SessionStore } from "@/memory/session-store"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -190,6 +192,9 @@ export function tui(input: {
     }
 
     const renderer = await createCliRenderer(rendererConfig(input.config))
+
+    await MemoryStore.init().catch((e) => console.error("Failed to init MemoryStore:", e))
+    void SessionStore.rebuildIndex().catch((e) => console.error("Failed to rebuild session index:", e))
 
     await render(() => {
       return (

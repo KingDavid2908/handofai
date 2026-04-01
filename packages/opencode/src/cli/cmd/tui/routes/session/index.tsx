@@ -80,6 +80,7 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
+import { DialogMemory } from "../../component/dialog-memory"
 
 addDefaultParsers(parsers.parsers)
 

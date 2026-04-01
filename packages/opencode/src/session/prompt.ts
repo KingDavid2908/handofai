@@ -18,6 +18,8 @@ import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
 import { InstructionPrompt } from "./instruction"
+import { MemoryService } from "../memory"
+import { MemoryNudge } from "../memory/nudge"
 import { Plugin } from "../plugin"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
@@ -685,6 +687,35 @@ export namespace SessionPrompt {
         ...(skills ? [skills] : []),
         ...(await InstructionPrompt.system()),
       ]
+
+      // Inject memory snapshots if memory system is initialized
+      const memorySnapshot = await MemoryService.getSnapshot()
+      if (memorySnapshot) {
+        const memoryBlocks: string[] = []
+
+        if (memorySnapshot.memory.trim()) {
+          memoryBlocks.push(
+            `══════════════════════════════════════════════\n` +
+            `MEMORY (your personal notes) [${memorySnapshot.memoryUsage.percent}% — ${memorySnapshot.memoryUsage.used}/${memorySnapshot.memoryUsage.limit} chars]\n` +
+            `══════════════════════════════════════════════\n` +
+            memorySnapshot.memory,
+          )
+        }
+
+        if (memorySnapshot.user.trim()) {
+          memoryBlocks.push(
+            `══════════════════════════════════════════════\n` +
+            `USER PROFILE (facts about the user) [${memorySnapshot.userUsage.percent}% — ${memorySnapshot.userUsage.used}/${memorySnapshot.userUsage.limit} chars]\n` +
+            `══════════════════════════════════════════════\n` +
+            memorySnapshot.user,
+          )
+        }
+
+        if (memoryBlocks.length > 0) {
+          system.push(memoryBlocks.join("\n\n"))
+        }
+      }
+
       const format = lastUser.format ?? { type: "text" }
       if (format.type === "json_schema") {
         system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
@@ -747,6 +778,17 @@ export namespace SessionPrompt {
           overflow: !processor.message.finish,
         })
       }
+
+      // Check memory nudge
+      await MemoryService.incrementTurn(sessionID)
+      if (await MemoryService.checkNudge(sessionID)) {
+        MemoryNudge.review({
+          sessionID,
+          model: lastUser.model,
+          agent,
+        }).catch((e) => log.error("memory nudge failed", { error: e }))
+      }
+
       continue
     }
     SessionCompaction.prune({ sessionID })

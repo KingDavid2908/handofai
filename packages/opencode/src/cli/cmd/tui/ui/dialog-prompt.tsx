@@ -29,7 +29,9 @@ export function DialogPrompt(props: DialogPromptProps) {
       return
     }
     if (evt.name === "return") {
+      evt.preventDefault()
       props.onConfirm?.(textarea.plainText)
+      dialog.clear()
     }
   })
 
@@ -68,6 +70,7 @@ export function DialogPrompt(props: DialogPromptProps) {
           onSubmit={() => {
             if (props.busy) return
             props.onConfirm?.(textarea.plainText)
+            dialog.clear()
           }}
           height={3}
           keyBindings={props.busy ? [] : [{ name: "return", action: "submit" }]}
@@ -98,7 +101,7 @@ DialogPrompt.show = (dialog: DialogContext, title: string, options?: Omit<Dialog
   return new Promise<string | null>((resolve) => {
     dialog.replace(
       () => (
-        <DialogPrompt title={title} {...options} onConfirm={(value) => resolve(value)} onCancel={() => resolve(null)} />
+        <DialogPrompt title={title} {...options} onConfirm={(value) => resolve(value)} onCancel={() => { resolve(null); dialog.clear() }} />
       ),
       () => resolve(null),
     )
