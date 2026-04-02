@@ -11,6 +11,7 @@ import { Instance } from "../project/instance"
 import { assertExternalDirectory } from "./external-directory"
 import { InstructionPrompt } from "../session/instruction"
 import { Filesystem } from "../util/filesystem"
+import { checkReadLoop, notifyOtherToolCall } from "./read/loop-tracker"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -107,6 +108,8 @@ export const ReadTool = Tool.define("read", {
         `</entries>`,
       ].join("\n")
 
+      notifyOtherToolCall(ctx.sessionID)
+
       return {
         title,
         output,
@@ -147,6 +150,20 @@ export const ReadTool = Tool.define("read", {
     const isBinary = await isBinaryFile(filepath, Number(stat.size))
     if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
 
+    const limit = params.limit ?? DEFAULT_READ_LIMIT
+    const offset = params.offset ?? 1
+    const region = { path: filepath, offset, limit }
+    const loopResult = checkReadLoop(ctx.sessionID, region)
+
+    if (loopResult.status === "blocked") {
+      const msg = loopResult.error || "Read blocked"
+      return {
+        title,
+        output: `<read_error>\n${msg}\n</read_error>`,
+        metadata: { preview: msg, truncated: false, loaded: [] },
+      }
+    }
+
     const stream = createReadStream(filepath, { encoding: "utf8" })
     const rl = createInterface({
       input: stream,
@@ -155,8 +172,6 @@ export const ReadTool = Tool.define("read", {
       crlfDelay: Infinity,
     })
 
-    const limit = params.limit ?? DEFAULT_READ_LIMIT
-    const offset = params.offset ?? 1
     const start = offset - 1
     const raw: string[] = []
     let bytes = 0
@@ -221,6 +236,10 @@ export const ReadTool = Tool.define("read", {
 
     if (instructions.length > 0) {
       output += `\n\n<system-reminder>\n${instructions.map((i) => i.content).join("\n\n")}\n</system-reminder>`
+    }
+
+    if (loopResult.status === "warning") {
+      output += `\n\n<read_warning>\n${loopResult.warning}\n</read_warning>`
     }
 
     return {

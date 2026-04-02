@@ -832,6 +832,31 @@ export namespace Config {
       ref: "ServerConfig",
     })
 
+  export const BashBackendConfig = z
+    .object({
+      backend: z.enum(["local", "docker", "ssh"]).default("local"),
+      docker_image: z.string().default("nikolaik/python-nodejs:python3.11-nodejs20"),
+      docker_forward_env: z.array(z.string()).default([]),
+      docker_volumes: z.array(z.string()).default([]),
+      docker_mount_cwd: z.boolean().default(false),
+      container_cpu: z.number().default(1),
+      container_memory: z.number().default(5120),
+      container_disk: z.number().default(50240),
+      container_persistent: z.boolean().default(true),
+      ssh_host: z.string().default(""),
+      ssh_user: z.string().default(""),
+      ssh_port: z.number().default(22),
+      ssh_key: z.string().default(""),
+      ssh_persistent: z.boolean().default(false),
+      local_persistent: z.boolean().default(false),
+      lifetime_seconds: z.number().default(300),
+      approval_mode: z.enum(["manual", "off"]).default("manual"),
+    })
+    .partial()
+    .meta({
+      ref: "BashBackendConfig",
+    })
+
   export const Layout = z.enum(["auto", "stretch"]).meta({
     ref: "LayoutConfig",
   })
@@ -1056,6 +1081,7 @@ export namespace Config {
           url: z.string().optional().describe("Enterprise URL"),
         })
         .optional(),
+      bash: BashBackendConfig.optional().describe("Bash tool backend configuration"),
       compaction: z
         .object({
           auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),

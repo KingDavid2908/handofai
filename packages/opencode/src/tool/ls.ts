@@ -5,6 +5,7 @@ import DESCRIPTION from "./ls.txt"
 import { Instance } from "../project/instance"
 import { Ripgrep } from "../file/ripgrep"
 import { assertExternalDirectory } from "./external-directory"
+import { notifyOtherToolCall } from "./read/loop-tracker"
 
 export const IGNORE_PATTERNS = [
   "node_modules/",
@@ -108,6 +109,8 @@ export const ListTool = Tool.define("list", {
     }
 
     const output = `${searchPath}/\n` + renderDir(".", 0)
+
+    notifyOtherToolCall(ctx.sessionID)
 
     return {
       title: path.relative(Instance.worktree, searchPath),

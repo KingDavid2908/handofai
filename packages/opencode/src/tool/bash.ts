@@ -18,6 +18,17 @@ import { Shell } from "@/shell/shell"
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncate"
 import { Plugin } from "@/plugin"
+import { notifyOtherToolCall } from "./read/loop-tracker"
+
+import { getBackend, type BackendConfig, _cache, _lastActivity, _locks } from "./bash/backend"
+import { getProcessRegistry } from "./bash/process-registry"
+import { checkAllGuards, approvePattern } from "./bash/approval"
+import { transformSudo } from "./bash/sudo"
+import { handleSudoFailure } from "./bash/sudo"
+import { postProcess } from "./bash/redact"
+import { createPty, type PtyHandle } from "./bash/pty"
+import { checkBashRequirements } from "./bash/requirements"
+import { startCleanupThread, registerAtexitCleanup } from "./bash/cleanup"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
@@ -439,6 +450,8 @@ const parser = lazy(async () => {
   return { bash, ps }
 })
 
+let _cleanupStarted = false
+
 // TODO: we may wanna rename this tool so it works better on other shells
 export const BashTool = Tool.define("bash", async () => {
   const shell = Shell.acceptable()
@@ -449,13 +462,25 @@ export const BashTool = Tool.define("bash", async () => {
       : "If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead."
   log.info("bash tool using shell", { shell })
 
+  if (!_cleanupStarted) {
+    _cleanupStarted = true
+    startCleanupThread(_cache, _lastActivity, _locks, 300)
+    registerAtexitCleanup(_cache)
+  }
+
   return {
     description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
       .replaceAll("${os}", process.platform)
       .replaceAll("${shell}", name)
       .replaceAll("${chaining}", chain)
       .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
-      .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
+      .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES))
+      + "\n\nAdditional options:\n"
+      + "- backend: Execution backend (local/docker/ssh). Default: local.\n"
+      + "- background: Run in background. Returns session_id for polling/waiting.\n"
+      + "- pty: Use pseudo-terminal for interactive CLI tools (local and SSH backends).\n"
+      + "- force: Skip dangerous command approval check.\n"
+      + "- check_interval: Seconds between auto status checks for background processes (min 30).",
     parameters: z.object({
       command: z.string().describe("The command to execute"),
       timeout: z.number().describe("Optional timeout in milliseconds").optional(),
@@ -470,6 +495,24 @@ export const BashTool = Tool.define("bash", async () => {
         .describe(
           "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
         ),
+      backend: z.enum(["local", "docker", "ssh"])
+        .describe("Execution backend. Default: local.")
+        .optional(),
+      background: z.boolean()
+        .describe("Run in background. Returns session_id for polling/waiting.")
+        .optional(),
+      pty: z.boolean()
+        .describe("Use pseudo-terminal for interactive CLI tools (local and SSH backends only).")
+        .optional(),
+      force: z.boolean()
+        .describe("Skip dangerous command approval check.")
+        .optional(),
+      task_id: z.string()
+        .describe("Unique identifier for backend isolation (sandbox reuse).")
+        .optional(),
+      check_interval: z.number()
+        .describe("Seconds between auto status checks for background processes (gateway/messaging only, min 30).")
+        .optional(),
     }),
     async execute(params, ctx) {
       const cwd = params.workdir ? await resolvePath(params.workdir, Instance.directory, shell) : Instance.directory
@@ -478,23 +521,206 @@ export const BashTool = Tool.define("bash", async () => {
       }
       const timeout = params.timeout ?? DEFAULT_TIMEOUT
       const ps = PS.has(name)
+      const sessionId = ctx.sessionID
+      const taskId = params.task_id || sessionId
+      const backendType = params.backend || "local"
+
       const root = await parse(params.command, ps)
       const scan = await collect(root, cwd, ps, shell)
       if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
       await ask(ctx, scan)
 
-      return run(
-        {
-          shell,
-          name,
-          command: params.command,
+      if (!params.force) {
+        const approval = checkAllGuards(params.command, backendType, sessionId)
+        if (approval.status === "approval_required") {
+          try {
+            await ctx.ask({
+              permission: "dangerous_command",
+              patterns: [params.command],
+              always: [params.command],
+              metadata: { reason: approval.description, patternKey: approval.patternKey },
+            })
+          } catch {
+            return {
+              title: "Command blocked",
+              metadata: { output: `Command denied: ${approval.description}`, exit: -1 },
+              output: `Command denied: ${approval.description}. Use force=true to override.`,
+            }
+          }
+          approvePattern(sessionId, approval.patternKey, true)
+        }
+      }
+
+      const env = await shellEnv(ctx, cwd)
+      const { transformedCommand, sudoStdin } = await transformSudo(params.command, env)
+
+      const backendConfig: BackendConfig = {
+        type: backendType as BackendConfig["type"],
+        dockerImage: "nikolaik/python-nodejs:python3.11-nodejs20",
+        dockerForwardEnv: [],
+        dockerVolumes: [],
+        dockerMountCwd: false,
+        containerCpu: 1,
+        containerMemory: 5120,
+        containerDisk: 50240,
+        containerPersistent: true,
+        sshHost: "",
+        sshUser: "",
+        sshPort: 22,
+        sshKey: "",
+        sshPersistent: false,
+        localPersistent: false,
+      }
+
+      if (params.background) {
+        const registry = getProcessRegistry()
+        const session = registry.spawnLocal({
+          command: transformedCommand,
           cwd,
-          env: await shellEnv(ctx, cwd),
-          timeout,
-          description: params.description,
-        },
-        ctx,
-      )
+          taskId,
+          sessionKey: sessionId,
+          envVars: env,
+          usePty: params.pty,
+        })
+
+        if (params.check_interval && params.background) {
+          const effectiveInterval = Math.max(30, params.check_interval)
+          session.watcherInterval = effectiveInterval
+          session.watcherPlatform = process.env.HANDOFFAI_SESSION_PLATFORM || ""
+          session.watcherChatId = process.env.HANDOFFAI_SESSION_CHAT_ID || ""
+          session.watcherThreadId = process.env.HANDOFFAI_SESSION_THREAD_ID || ""
+
+          registry.pendingWatchers.push({
+            sessionId: session.id,
+            checkInterval: effectiveInterval,
+            sessionKey: sessionId,
+            platform: session.watcherPlatform,
+            chatId: session.watcherChatId,
+            threadId: session.watcherThreadId,
+          })
+        }
+
+        return {
+          title: `Background: ${params.description}`,
+          metadata: {
+            output: "Background process started",
+            exit: 0,
+            description: params.description,
+            session_id: session.id,
+            pid: session.pid,
+          },
+          output: `Background process started. Session ID: ${session.id}. Use process tool to poll/wait/kill.`,
+        }
+      }
+
+      const MAX_RETRIES = 3
+      let lastError: Error | null = null
+
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const execOpts = {
+            cwd,
+            timeout,
+            env,
+            stdin: sudoStdin ?? undefined,
+          }
+
+          if (params.pty && (backendType === "local" || backendType === "ssh")) {
+            const ptyHandle = createPty({
+              command: transformedCommand,
+              cwd,
+              env,
+              cols: 120,
+              rows: 40,
+            })
+            if (ptyHandle) {
+              return await runPty(ptyHandle, ctx, params.description, timeout)
+            }
+          }
+
+          const backend = await getBackend(taskId, backendConfig)
+          const result = await backend.execute(transformedCommand, execOpts)
+
+          let { output, redacted } = postProcess(result.output)
+          const isGateway = !!process.env.HANDOFFAI_GATEWAY_SESSION
+          output = handleSudoFailure(output, isGateway)
+          const truncated = await Truncate.output(output, {})
+
+          notifyOtherToolCall(ctx.sessionID)
+
+          return {
+            title: params.description,
+            metadata: {
+              output: preview(truncated.content),
+              exit: result.exitCode,
+              description: params.description,
+              backend: backendType,
+              redacted,
+              truncated: truncated.truncated,
+            },
+            output: truncated.content,
+          }
+        } catch (error) {
+          lastError = error as Error
+          if (attempt < MAX_RETRIES) {
+            const waitMs = Math.pow(2, attempt + 1) * 1000
+            await new Promise(r => setTimeout(r, waitMs))
+            continue
+          }
+        }
+      }
+
+      return {
+        title: params.description,
+        metadata: { output: `Execution failed: ${lastError?.message}`, exit: -1, description: params.description },
+        output: `Command execution failed after ${MAX_RETRIES + 1} attempts: ${lastError?.message}`,
+      }
     },
   }
 })
+
+async function runPty(
+  pty: PtyHandle,
+  ctx: Tool.Context,
+  description: string,
+  timeout: number,
+): Promise<{ title: string; metadata: any; output: string }> {
+  let output = ""
+  let exitCode: number | null = null
+
+  pty.onData = (data: string) => {
+    output += data
+    ctx.metadata({ metadata: { output: preview(output), description } })
+  }
+  pty.onExit = (code: number) => { exitCode = code }
+
+  if (ctx.abort.aborted) {
+    pty.kill()
+    return {
+      title: description,
+      metadata: { output: preview(output + "\n\n<bash_metadata>\nUser aborted the command\n</bash_metadata>"), exit: 130, description },
+      output: output + "\n\n<bash_metadata>\nUser aborted the command\n</bash_metadata>",
+    }
+  }
+
+  const timer = setTimeout(() => pty.kill(), timeout + 100)
+
+  await new Promise<void>((resolve) => {
+    const check = setInterval(() => {
+      if (exitCode !== null) { clearInterval(check); clearTimeout(timer); resolve() }
+    }, 100)
+    ctx.abort.addEventListener("abort", () => {
+      pty.kill()
+      clearInterval(check)
+      clearTimeout(timer)
+      resolve()
+    }, { once: true })
+  })
+
+  const { output: processed, redacted } = postProcess(output)
+  return {
+    title: description,
+    metadata: { output: preview(processed), exit: exitCode ?? -1, description, redacted },
+    output: processed,
+  }
+}

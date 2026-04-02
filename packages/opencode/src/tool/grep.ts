@@ -9,6 +9,7 @@ import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
 import path from "path"
 import { assertExternalDirectory } from "./external-directory"
+import { notifyOtherToolCall } from "./read/loop-tracker"
 
 const MAX_LINE_LENGTH = 2000
 
@@ -143,6 +144,8 @@ export const GrepTool = Tool.define("grep", {
       outputLines.push("")
       outputLines.push("(Some paths were inaccessible and skipped)")
     }
+
+    notifyOtherToolCall(ctx.sessionID)
 
     return {
       title: params.pattern,

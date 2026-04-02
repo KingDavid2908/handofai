@@ -115,3 +115,51 @@ Important:
 
 # Other common operations
 - View comments on a GitHub PR: gh api repos/foo/bar/pulls/123/comments
+
+## Additional Options
+
+- **backend**: Execution backend (local/docker/ssh). Default: local.
+  - `local`: Run directly on the host machine (fastest, default)
+  - `docker`: Run in a hardened Docker container (isolated, requires Docker)
+  - `ssh`: Run on a remote machine via SSH (requires SSH access)
+- **background**: Run in background mode. Returns a session_id for polling/waiting. Only use for long-running servers, watchers, or processes that never exit. For scripts, builds, or installations, use foreground with a generous timeout instead.
+- **pty**: Use pseudo-terminal mode for interactive CLI tools (REPLs, vim, top, etc.). Local and SSH backends only. Requires node-pty to be installed.
+- **force**: Skip dangerous command approval check. Use with caution.
+
+## Background Processes
+
+Foreground (default): Commands return instantly when done, even if the timeout is high. Set timeout=300 for long builds — you'll still get the result in seconds if it's fast.
+
+Background: ONLY for long-running servers, watchers, or processes that never exit. Set background=true to get a session_id, then use the process tool to poll/wait/kill. Do NOT use background for scripts, builds, or installs — foreground with a generous timeout is always better.
+
+## PTY Mode
+
+Set pty=true for interactive CLI tools (Python REPL, Codex, Claude Code, top, htop). Do NOT use vim/nano/interactive tools without pty=true — they hang without a pseudo-terminal.
+
+## Environment Passthrough
+
+For Docker backend, environment variables can be forwarded into the container via the `docker_forward_env` config option. This allows skills and tools to declare which env vars they need inside the sandbox. Example: `docker_forward_env: ["NOTION_API_KEY", "GITHUB_TOKEN"]`.
+
+## Persistent Shell Mode
+
+When `local_persistent: true` or `ssh_persistent: true` is set in config, the backend keeps a single long-lived bash shell alive across calls. This means:
+- Working directory changes (`cd`) persist between calls
+- Shell variables and exports persist between calls
+- No per-command shell startup overhead
+- Uses file-based IPC protocol (temp files for stdout/stderr/exit-code, polled with exponential backoff 10ms → 250ms)
+- Cleaned up on backend teardown
+
+## Inactivity-Based Cleanup
+
+A background cleanup thread runs every 60 seconds and terminates any backend (Docker container, SSH connection, persistent shell) that has been inactive for longer than `lifetime_seconds` (default 300s). Sandboxes with active background processes are kept alive. On process exit, all remaining backends are cleaned up.
+
+## Pre-Flight Requirements
+
+`checkBashRequirements(backendType, config)` validates that the selected backend is actually available before the tool is exposed to the LLM:
+- **Docker**: Checks `docker` executable exists in PATH (or known install locations) and `docker version` succeeds
+- **SSH**: Checks `ssh` client is available and `ssh_host` + `ssh_user` are configured
+- **Local**: Always returns true
+
+## Sudo Failure Tips
+
+When running in gateway/messaging mode (`HANDOFFAI_GATEWAY_SESSION` env var set), if sudo fails with "a password is required" / "no tty present" / "a terminal is required", a helpful tip is appended to the output: "Tip: To enable sudo, add SUDO_PASSWORD to your handofai config (.env file)."
