@@ -689,6 +689,7 @@ export namespace SessionPrompt {
       ]
 
       // Inject memory snapshots if memory system is initialized
+      await MemoryService.load().catch(() => {})
       const memorySnapshot = await MemoryService.getSnapshot()
       if (memorySnapshot) {
         const memoryBlocks: string[] = []

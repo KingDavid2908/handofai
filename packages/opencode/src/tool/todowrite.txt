@@ -163,5 +163,13 @@ The assistant did not use the todo list because this is a single command executi
    - Break complex tasks into smaller, manageable steps
    - Use clear, descriptive task names
 
+4. **Merge Mode**: Each todo item has an optional `id` field for identity tracking. When `merge=true`:
+   - Items with matching `id` are updated in place (only provided fields change)
+   - New items (no matching `id`) are appended to the list
+   - This lets you update status on specific items without re-sending the full list
+   - When `merge=false` (default), the entire list is replaced
+
+5. **Compression Preservation**: Active todos (pending/in_progress) are automatically re-injected into your context after session compaction. Completed and cancelled todos are excluded to avoid re-doing finished work.
+
 When in doubt, use this tool. Being proactive with task management demonstrates attentiveness and ensures you complete all requirements successfully.
 

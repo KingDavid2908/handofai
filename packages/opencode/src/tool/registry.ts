@@ -14,6 +14,8 @@ import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import { SessionSearchTool } from "./session-search"
 import { MemoryTool } from "./memory"
+import { SkillManageTool } from "./skill-manage"
+import { SkillsListTool } from "./skills-list"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Config } from "../config/config"
@@ -134,6 +136,8 @@ export namespace ToolRegistry {
           SessionSearchTool,
           MemoryTool,
           SkillTool,
+          SkillsListTool,
+          SkillManageTool,
           ApplyPatchTool,
           ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
           ...(cfg.experimental?.batch_tool === true ? [BatchTool] : []),

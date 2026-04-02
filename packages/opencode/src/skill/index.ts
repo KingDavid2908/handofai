@@ -61,6 +61,7 @@ export namespace Skill {
     readonly all: () => Effect.Effect<Info[]>
     readonly dirs: () => Effect.Effect<string[]>
     readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
+    readonly reload: () => Effect.Effect<void>
   }
 
   const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.Interface) {
@@ -234,7 +235,11 @@ export namespace Skill {
         return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
       })
 
-      return Service.of({ get, all, dirs, available })
+      const reload = Effect.fn("Skill.reload")(function* () {
+        yield* InstanceState.invalidate(state)
+      })
+
+      return Service.of({ get, all, dirs, available, reload })
     }),
   )
 
@@ -280,5 +285,45 @@ export namespace Skill {
 
   export async function available(agent?: Agent.Info) {
     return runPromise((skill) => skill.available(agent))
+  }
+
+  export async function reload() {
+    return runPromise((skill) => skill.reload())
+  }
+
+  export async function create(name: string, content: string, category?: string) {
+    const { create } = await import("./manage")
+    return create(name, content, category)
+  }
+
+  export async function edit(name: string, content: string) {
+    const { edit } = await import("./manage")
+    return edit(name, content)
+  }
+
+  export async function patch(
+    name: string,
+    oldString: string,
+    newString: string,
+    filePath?: string,
+    replaceAll?: boolean,
+  ) {
+    const { patch } = await import("./manage")
+    return patch(name, oldString, newString, filePath, replaceAll)
+  }
+
+  export async function remove(name: string) {
+    const { remove } = await import("./manage")
+    return remove(name)
+  }
+
+  export async function writeFile(name: string, filePath: string, content: string) {
+    const { writeFile } = await import("./manage")
+    return writeFile(name, filePath, content)
+  }
+
+  export async function removeFile(name: string, filePath: string) {
+    const { removeFile } = await import("./manage")
+    return removeFile(name, filePath)
   }
 }

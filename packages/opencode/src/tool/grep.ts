@@ -10,8 +10,32 @@ import { Instance } from "../project/instance"
 import path from "path"
 import { assertExternalDirectory } from "./external-directory"
 import { notifyOtherToolCall } from "./read/loop-tracker"
+import { redactSecrets } from "./bash/redact"
 
 const MAX_LINE_LENGTH = 2000
+
+const _searchTracker = new Map<string, { lastKey: string; consecutive: number }>()
+
+function _getSearchKey(pattern: string, searchPath: string, include?: string): string {
+  return `${pattern}|${searchPath}|${include ?? ""}`
+}
+
+function _checkSearchLoop(key: string): { blocked: boolean; count: number } {
+  const entry = _searchTracker.get(key)
+  if (entry) {
+    entry.consecutive++
+    return { blocked: entry.consecutive >= 4, count: entry.consecutive }
+  }
+  _searchTracker.set(key, { lastKey: key, consecutive: 1 })
+  return { blocked: false, count: 1 }
+}
+
+function _resetSearchLoop(): void {
+  for (const entry of _searchTracker.values()) {
+    entry.lastKey = ""
+    entry.consecutive = 0
+  }
+}
 
 export const GrepTool = Tool.define("grep", {
   description: DESCRIPTION,
@@ -39,6 +63,17 @@ export const GrepTool = Tool.define("grep", {
     let searchPath = params.path ?? Instance.directory
     searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)
     await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
+
+    const searchKey = _getSearchKey(params.pattern, searchPath, params.include)
+    const { blocked, count } = _checkSearchLoop(searchKey)
+    if (blocked) {
+      return {
+        title: params.pattern,
+        metadata: { matches: 0, truncated: false },
+        output: `BLOCKED: You have run this exact search ${count} times in a row. The results have NOT changed. Stop re-searching and proceed with your task.`,
+      }
+    }
+
 
     const rgPath = await Ripgrep.filepath()
     const args = ["-nH", "--hidden", "--no-messages", "--field-match-separator=|", "--regexp", params.pattern]
@@ -89,7 +124,7 @@ export const GrepTool = Tool.define("grep", {
       if (!filePath || !lineNumStr || lineTextParts.length === 0) continue
 
       const lineNum = parseInt(lineNumStr, 10)
-      const lineText = lineTextParts.join("|")
+      const lineText = redactSecrets(lineTextParts.join("|"))
 
       const stats = Filesystem.stat(filePath)
       if (!stats) continue
@@ -146,6 +181,12 @@ export const GrepTool = Tool.define("grep", {
     }
 
     notifyOtherToolCall(ctx.sessionID)
+    _resetSearchLoop()
+
+    let resultOutput = outputLines.join("\n")
+    if (count >= 3) {
+      resultOutput += `\n\n<grep_warning>\nYou have run this exact search ${count} times consecutively. The results have not changed. Use the information you already have.\n</grep_warning>`
+    }
 
     return {
       title: params.pattern,
@@ -153,7 +194,7 @@ export const GrepTool = Tool.define("grep", {
         matches: totalMatches,
         truncated,
       },
-      output: outputLines.join("\n"),
+      output: resultOutput,
     }
   },
 })

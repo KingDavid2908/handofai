@@ -6,3 +6,13 @@ Usage:
 - ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
 - NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
 - Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.
+
+## Sensitive Path Protection
+
+This tool detects writes to sensitive system paths and warns you before proceeding:
+- `/etc/` — System configuration directory
+- `/boot/` — Boot partition
+- `/usr/lib/systemd/` — Systemd unit files
+- `/var/run/docker.sock`, `/run/docker.sock` — Docker socket
+
+When a sensitive path is detected, a permission prompt is shown explaining the risk. You can approve to proceed or deny to cancel the write. This check is skipped on Windows.

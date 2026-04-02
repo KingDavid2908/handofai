@@ -58,6 +58,7 @@
     "@types/which": "3.0.4",
     "@types/yargs": "17.0.33",
     "@typescript/native-preview": "catalog:",
+    "better-sqlite3": "12.8.0",
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "typescript": "catalog:",

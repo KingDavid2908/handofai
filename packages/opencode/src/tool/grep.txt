@@ -3,6 +3,8 @@
 - Supports full regex syntax (eg. "log.*Error", "function\s+\w+", etc.)
 - Filter files by pattern with the include parameter (eg. "*.js", "*.{ts,tsx}")
 - Returns file paths and line numbers with at least one match sorted by modification time
+- Secrets (API keys, tokens, passwords) are automatically redacted from match content
+- Consecutive identical searches are detected: a warning appears after 3 repeats, and results are blocked after 4
 - Use this tool when you need to find files containing specific patterns
 - If you need to identify/count the number of matches within files, use the Bash tool with `rg` (ripgrep) directly. Do NOT use `grep`.
 - When you are doing an open-ended search that may require multiple rounds of globbing and grepping, use the Task tool instead

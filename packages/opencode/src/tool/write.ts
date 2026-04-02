@@ -14,6 +14,7 @@ import { Instance } from "../project/instance"
 import { trimDiff } from "./edit"
 import { assertExternalDirectory } from "./external-directory"
 import { notifyOtherToolCall } from "./read/loop-tracker"
+import { checkSensitivePath } from "./write/guard"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
@@ -26,6 +27,20 @@ export const WriteTool = Tool.define("write", {
   }),
   async execute(params, ctx) {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
+
+    const sensitiveResult = checkSensitivePath(filepath)
+    if (sensitiveResult) {
+      await ctx.ask({
+        permission: "sensitive_path",
+        patterns: [sensitiveResult.path],
+        always: [],
+        metadata: {
+          filepath: sensitiveResult.path,
+          reason: sensitiveResult.reason,
+        },
+      })
+    }
+
     await assertExternalDirectory(ctx, filepath)
 
     const exists = await Filesystem.exists(filepath)
