@@ -128,6 +128,12 @@ export namespace Permission {
   interface State {
     pending: Map<PermissionID, PendingEntry>
     approved: Ruleset
+    replyMessages: Map<PermissionID, string>
+  }
+
+  const replyMessages = new Map<string, string>()
+  export function getReplyMessage(requestID: string): string | undefined {
+    return replyMessages.get(requestID)
   }
 
   export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
@@ -148,6 +154,7 @@ export namespace Permission {
           const state = {
             pending: new Map<PermissionID, PendingEntry>(),
             approved: row?.data ?? [],
+            replyMessages: new Map<PermissionID, string>(),
           }
 
           yield* Effect.addFinalizer(() =>
@@ -201,9 +208,13 @@ export namespace Permission {
       })
 
       const reply = Effect.fn("Permission.reply")(function* (input: z.infer<typeof ReplyInput>) {
-        const { approved, pending } = yield* InstanceState.get(state)
+        const { approved, pending, replyMessages } = yield* InstanceState.get(state)
         const existing = pending.get(input.requestID)
         if (!existing) return
+
+        if (input.message) {
+          replyMessages.set(input.requestID, input.message)
+        }
 
         pending.delete(input.requestID)
         void Bus.publish(Event.Replied, {

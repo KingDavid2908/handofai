@@ -543,6 +543,7 @@ export namespace Config {
           doom_loop: PermissionAction.optional(),
           skill: PermissionRule.optional(),
           skill_manage: PermissionAction.optional(),
+          process: PermissionAction.optional(),
         })
         .catchall(PermissionRule)
         .or(PermissionAction),
@@ -717,6 +718,7 @@ export namespace Config {
       model_cycle_recent_reverse: z.string().optional().default("shift+f2").describe("Previous recently used model"),
       model_cycle_favorite: z.string().optional().default("none").describe("Next favorite model"),
       model_cycle_favorite_reverse: z.string().optional().default("none").describe("Previous favorite model"),
+      vision_model_list: z.string().optional().default("<leader>vm").describe("Select vision model"),
       command_list: z.string().optional().default("ctrl+p").describe("List available commands"),
       agent_list: z.string().optional().default("<leader>a").describe("List agents"),
       agent_cycle: z.string().optional().default("tab").describe("Next agent"),
@@ -970,6 +972,9 @@ export namespace Config {
       model: ModelId.describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
       small_model: ModelId.describe(
         "Small model to use for tasks like title generation in the format of provider/model",
+      ).optional(),
+      vision_model: ModelId.describe(
+        "Vision model to use for image analysis in the format of provider/model. Leave empty to use current model.",
       ).optional(),
       default_agent: z
         .string()

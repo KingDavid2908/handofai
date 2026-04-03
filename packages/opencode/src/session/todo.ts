@@ -33,7 +33,13 @@ export namespace Todo {
 
       for (const todo of input.todos) {
         if (todo.id && byId.has(todo.id)) {
-          byId.set(todo.id, { ...byId.get(todo.id)!, ...todo })
+          const existingTodo = byId.get(todo.id)!
+          byId.set(todo.id, {
+            ...existingTodo,
+            ...(todo.content !== undefined ? { content: todo.content } : {}),
+            ...(todo.status !== undefined ? { status: todo.status } : {}),
+            ...(todo.priority !== undefined ? { priority: todo.priority } : {}),
+          })
         } else {
           const id = todo.id ?? crypto.randomUUID()
           byId.set(id, { ...todo, id })
@@ -59,14 +65,21 @@ export namespace Todo {
       })
       Bus.publish(Event.Updated, { sessionID: input.sessionID, todos: merged })
     } else {
+      const byId = new Map<string, Info>()
+      for (const todo of input.todos) {
+        const id = todo.id ?? crypto.randomUUID()
+        byId.set(id, { ...todo, id })
+      }
+
+      const deduped = Array.from(byId.values())
       Database.transaction((db) => {
         db.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
-        if (input.todos.length === 0) return
+        if (deduped.length === 0) return
         db.insert(TodoTable)
           .values(
-            input.todos.map((todo, position) => ({
+            deduped.map((todo, position) => ({
               session_id: input.sessionID,
-              id: todo.id ?? crypto.randomUUID(),
+              id: todo.id,
               content: todo.content,
               status: todo.status,
               priority: todo.priority,
@@ -75,7 +88,7 @@ export namespace Todo {
           )
           .run()
       })
-      Bus.publish(Event.Updated, input)
+      Bus.publish(Event.Updated, { sessionID: input.sessionID, todos: deduped })
     }
   }
 

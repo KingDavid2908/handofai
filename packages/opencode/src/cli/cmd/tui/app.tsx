@@ -28,6 +28,7 @@ import { StartupLoading } from "@tui/component/startup-loading"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
 import { DialogModel, useConnected } from "@tui/component/dialog-model"
+import { DialogVisionModel } from "@tui/component/dialog-vision-model"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
@@ -550,6 +551,18 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       hidden: true,
       onSelect: () => {
         local.model.cycleFavorite(-1)
+      },
+    },
+    {
+      title: "Switch vision model",
+      value: "vision.model",
+      keybind: "vision_model_list",
+      category: "Agent",
+      slash: {
+        name: "vision",
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogVisionModel />)
       },
     },
     {

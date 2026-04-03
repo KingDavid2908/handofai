@@ -1089,6 +1089,12 @@ export function Prompt(props: PromptProps) {
                       <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
                     </text>
                   </Show>
+                  <Show when={local.visionModel.parsed()}>
+                    <text fg={theme.textMuted}>·</text>
+                    <text fg={theme.textMuted}>
+                      V:{local.visionModel.parsed()!.model}
+                    </text>
+                  </Show>
                 </box>
               </Show>
             </box>

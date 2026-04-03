@@ -87,7 +87,11 @@ export class ProcessRegistry {
     const shell = Shell.acceptable()
     const env = { ...process.env, ...opts.envVars }
 
-    const proc = spawn(shell, ["-lc", opts.command], {
+    const args = process.platform === "win32"
+      ? ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", opts.command]
+      : ["-lc", opts.command]
+
+    const proc = spawn(shell, args, {
       cwd: opts.cwd,
       env,
       stdio: ["pipe", "pipe", "pipe"],
@@ -181,7 +185,7 @@ export class ProcessRegistry {
     return session.output.split("\n").slice(-tail).join("\n")
   }
 
-  async wait(sessionId: string): Promise<ProcessSession> {
+  async wait(sessionId: string, timeoutMs: number = 60000): Promise<ProcessSession> {
     const session = this.running.get(sessionId)
     if (!session) {
       const finished = this.finished.get(sessionId)
@@ -189,7 +193,12 @@ export class ProcessRegistry {
       throw new Error(`Process ${sessionId} not found`)
     }
     return new Promise((resolve) => {
-      const check = () => { if (!session.running) { resolve(session); return }; setTimeout(check, 500) }
+      const deadline = Date.now() + timeoutMs
+      const check = () => {
+        if (!session.running) { resolve(session); return }
+        if (Date.now() >= deadline) { resolve(session); return }
+        setTimeout(check, 250)
+      }
       check()
     })
   }

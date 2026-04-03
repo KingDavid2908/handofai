@@ -112,12 +112,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           modelID: string
         }[]
         variant: Record<string, string | undefined>
+        visionModel: { providerID: string; modelID: string } | null
       }>({
         ready: false,
         model: {},
         recent: [],
         favorite: [],
         variant: {},
+        visionModel: null,
       })
 
       const filePath = path.join(Global.Path.state, "model.json")
@@ -135,6 +137,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           recent: modelStore.recent,
           favorite: modelStore.favorite,
           variant: modelStore.variant,
+          visionModel: modelStore.visionModel,
         })
       }
 
@@ -143,6 +146,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
           if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
           if (typeof x.variant === "object" && x.variant !== null) setModelStore("variant", x.variant)
+          if (x.visionModel && typeof x.visionModel === "object") setModelStore("visionModel", x.visionModel)
         })
         .catch(() => {})
         .finally(() => {
@@ -364,6 +368,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             this.set(variants[index + 1])
           },
         },
+        setVisionModel(modelEntry: { providerID: string; modelID: string } | null) {
+          setModelStore("visionModel", modelEntry)
+          save()
+        },
+        get visionModel() {
+          return modelStore.visionModel
+        },
       }
     })
 
@@ -406,6 +417,35 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       model,
       agent,
       mcp,
+      visionModel: {
+        current() {
+          return model.visionModel ?? null
+        },
+        set(modelEntry: { providerID: string; modelID: string }) {
+          if (!isModelValid(modelEntry)) {
+            toast.show({
+              message: `Model ${modelEntry.providerID}/${modelEntry.modelID} is not valid`,
+              variant: "warning",
+              duration: 3000,
+            })
+            return
+          }
+          model.setVisionModel(modelEntry)
+        },
+        clear() {
+          model.setVisionModel(null)
+        },
+        parsed() {
+          const current = this.current()
+          if (!current) return null
+          const provider = sync.data.provider.find((x) => x.id === current.providerID)
+          const info = provider?.models[current.modelID]
+          return {
+            provider: provider?.name ?? current.providerID,
+            model: info?.name ?? current.modelID,
+          }
+        },
+      },
     }
     return result
   },

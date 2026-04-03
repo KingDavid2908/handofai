@@ -16,6 +16,8 @@ import { SessionSearchTool } from "./session-search"
 import { MemoryTool } from "./memory"
 import { SkillManageTool } from "./skill-manage"
 import { SkillsListTool } from "./skills-list"
+import { ProcessTool } from "./process"
+import { VisionTool } from "./vision"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Config } from "../config/config"
@@ -138,6 +140,8 @@ export namespace ToolRegistry {
           SkillTool,
           SkillsListTool,
           SkillManageTool,
+          ProcessTool,
+          VisionTool,
           ApplyPatchTool,
           ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
           ...(cfg.experimental?.batch_tool === true ? [BatchTool] : []),
