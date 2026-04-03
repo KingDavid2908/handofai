@@ -113,6 +113,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }[]
         variant: Record<string, string | undefined>
         visionModel: { providerID: string; modelID: string } | null
+        moa_reference_models: Array<{ providerID: string; modelID: string; variant?: string }>
+        moa_aggregator_model: { providerID: string; modelID: string; variant?: string } | null
       }>({
         ready: false,
         model: {},
@@ -120,6 +122,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         favorite: [],
         variant: {},
         visionModel: null,
+        moa_reference_models: [],
+        moa_aggregator_model: null,
       })
 
       const filePath = path.join(Global.Path.state, "model.json")
@@ -138,6 +142,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           favorite: modelStore.favorite,
           variant: modelStore.variant,
           visionModel: modelStore.visionModel,
+          moa_reference_models: modelStore.moa_reference_models,
+          moa_aggregator_model: modelStore.moa_aggregator_model,
         })
       }
 
@@ -147,6 +153,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
           if (typeof x.variant === "object" && x.variant !== null) setModelStore("variant", x.variant)
           if (x.visionModel && typeof x.visionModel === "object") setModelStore("visionModel", x.visionModel)
+          if (Array.isArray(x.moa_reference_models)) setModelStore("moa_reference_models", x.moa_reference_models)
+          if (x.moa_aggregator_model && typeof x.moa_aggregator_model === "object") setModelStore("moa_aggregator_model", x.moa_aggregator_model)
         })
         .catch(() => {})
         .finally(() => {
@@ -375,6 +383,30 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         get visionModel() {
           return modelStore.visionModel
         },
+        moa: {
+          get ready() {
+            return modelStore.ready
+          },
+          get reference_models() {
+            return modelStore.moa_reference_models
+          },
+          get aggregator_model() {
+            return modelStore.moa_aggregator_model
+          },
+          setReferenceModels(models: Array<{ providerID: string; modelID: string; variant?: string }>) {
+            setModelStore("moa_reference_models", models)
+            save()
+          },
+          setAggregatorModel(model: { providerID: string; modelID: string; variant?: string } | null) {
+            setModelStore("moa_aggregator_model", model)
+            save()
+          },
+          clear() {
+            setModelStore("moa_reference_models", [])
+            setModelStore("moa_aggregator_model", null)
+            save()
+          },
+        },
       }
     })
 
@@ -417,6 +449,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       model,
       agent,
       mcp,
+      get moa() {
+        return model.moa
+      },
       visionModel: {
         current() {
           return model.visionModel ?? null

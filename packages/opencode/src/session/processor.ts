@@ -213,6 +213,10 @@ export namespace SessionProcessor {
             case "tool-result": {
               const match = ctx.toolcalls[value.toolCallId]
               if (!match || match.state.status !== "running") return
+              const toolCost = (value.output.metadata as Record<string, unknown> | undefined)?.cost
+              if (typeof toolCost === "number" && Number.isFinite(toolCost)) {
+                ctx.assistantMessage.cost += toolCost
+              }
               yield* session.updatePart({
                 ...match,
                 state: {

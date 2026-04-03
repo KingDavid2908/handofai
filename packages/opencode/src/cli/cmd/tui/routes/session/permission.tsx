@@ -398,6 +398,30 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               }
             }
 
+            if (permission === "moa") {
+              const refModels = props.request.metadata?.reference_models
+              const aggModel = props.request.metadata?.aggregator_model
+              const refCount = props.request.metadata?.reference_count ?? 0
+              const models = Array.isArray(refModels) ? refModels : []
+              return {
+                icon: "⚡",
+                title: "Mixture of Agents",
+                body: (
+                  <box flexDirection="column" gap={0} paddingLeft={1}>
+                    <text fg={theme.textMuted}>This will use {refCount} reference models + 1 aggregator model.</text>
+                    <text fg={theme.textMuted}> </text>
+                    <text fg={theme.textMuted}>Aggregator: {typeof aggModel === "string" ? aggModel : "unknown"}</text>
+                    <text fg={theme.textMuted}>Reference models:</text>
+                    <box>
+                      <For each={models}>{(m) => <text fg={theme.textMuted}>{"- " + m}</text>}</For>
+                    </box>
+                    <text fg={theme.textMuted}> </text>
+                    <text fg={theme.warning}>This may incur significant API costs. Continue?</text>
+                  </box>
+                ),
+              }
+            }
+
             return {
               icon: "⚙",
               title: `Call tool ${permission}`,

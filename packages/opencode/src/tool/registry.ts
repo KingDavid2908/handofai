@@ -17,6 +17,7 @@ import { MemoryTool } from "./memory"
 import { SkillManageTool } from "./skill-manage"
 import { SkillsListTool } from "./skills-list"
 import { ProcessTool } from "./process"
+import { MixtureOfAgentsTool } from "./mixture-of-agents"
 import { VisionTool } from "./vision"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
@@ -142,6 +143,7 @@ export namespace ToolRegistry {
           SkillManageTool,
           ProcessTool,
           VisionTool,
+          MixtureOfAgentsTool,
           ApplyPatchTool,
           ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
           ...(cfg.experimental?.batch_tool === true ? [BatchTool] : []),

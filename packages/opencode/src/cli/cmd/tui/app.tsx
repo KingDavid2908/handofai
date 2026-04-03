@@ -28,6 +28,7 @@ import { StartupLoading } from "@tui/component/startup-loading"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
 import { DialogModel, useConnected } from "@tui/component/dialog-model"
+import { DialogMoaConfig } from "@tui/component/dialog-moa-config"
 import { DialogVisionModel } from "@tui/component/dialog-vision-model"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
@@ -563,6 +564,17 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
       onSelect: () => {
         dialog.replace(() => <DialogVisionModel />)
+      },
+    },
+    {
+      title: "Configure MoA models",
+      value: "moa.configure",
+      category: "Agent",
+      slash: {
+        name: "moa",
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogMoaConfig />)
       },
     },
     {

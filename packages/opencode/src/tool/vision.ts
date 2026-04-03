@@ -6,6 +6,7 @@ import { Instance } from "../project/instance"
 import { Global } from "../global"
 import type { Provider } from "../provider/provider"
 import { Provider as ProviderModule } from "../provider/provider"
+import Decimal from "decimal.js"
 
 const MAX_DOWNLOAD_SIZE = 10 * 1024 * 1024
 const RETRY_DELAYS = [2000, 4000, 8000]
@@ -93,11 +94,11 @@ export const VisionTool = Tool.define("vision", {
       const model = await ProviderModule.getModel(providerID, modelID).catch(() => null)
 
       if (model) {
-        const analysis = await analyzeWithModel(dataUrl, question, model)
+        const { analysis, cost } = await analyzeWithModel(dataUrl, question, model)
         return {
           title: `Vision: ${path.basename(params.source)}`,
           output: analysis,
-          metadata: {},
+          metadata: { cost },
         }
       }
 
@@ -230,7 +231,7 @@ async function analyzeWithModel(
   imageDataUrl: string,
   question: string,
   model: Provider.Model,
-): Promise<string> {
+): Promise<{ analysis: string; cost: number }> {
   const language = await ProviderModule.getLanguage(model)
 
   const { streamText } = await import("ai")
@@ -256,11 +257,38 @@ async function analyzeWithModel(
   })
 
   let response = ""
+  let usage: any = null
   for await (const chunk of result.fullStream) {
     if (chunk.type === "text-delta") {
       response += chunk.text
     }
+    if (chunk.type === "finish") usage = chunk.totalUsage
   }
 
-  return response || "No analysis returned from the model."
+  const cost = calcCost(model, usage)
+  return { analysis: response || "No analysis returned from the model.", cost }
+}
+
+function calcCost(model: Provider.Model, usage: any): number {
+  if (!usage) return 0
+  const safe = (v: number) => Number.isFinite(v) ? v : 0
+  const inputTokens = safe(usage.inputTokens ?? 0)
+  const outputTokens = safe(usage.outputTokens ?? 0)
+  const reasoningTokens = safe(usage.reasoningTokens ?? 0)
+  const cacheRead = safe(usage.cachedInputTokens ?? 0)
+  const cacheWrite = safe(usage.cacheCreationInputTokens ?? 0)
+  const adjustedInput = safe(inputTokens - cacheRead - cacheWrite)
+  const costInfo = model.cost?.experimentalOver200K && adjustedInput + cacheRead > 200_000
+    ? model.cost.experimentalOver200K
+    : model.cost
+  if (!costInfo) return 0
+  return safe(
+    new Decimal(0)
+      .add(new Decimal(adjustedInput).mul(costInfo.input ?? 0).div(1_000_000))
+      .add(new Decimal(outputTokens).mul(costInfo.output ?? 0).div(1_000_000))
+      .add(new Decimal(cacheRead).mul(costInfo.cache?.read ?? 0).div(1_000_000))
+      .add(new Decimal(cacheWrite).mul(costInfo.cache?.write ?? 0).div(1_000_000))
+      .add(new Decimal(reasoningTokens).mul(costInfo.output ?? 0).div(1_000_000))
+      .toNumber()
+  )
 }
