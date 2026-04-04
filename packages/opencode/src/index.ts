@@ -36,6 +36,7 @@ import { Database } from "./storage/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { VisionCommand } from "./cli/cmd/vision"
+import { CronCommand } from "./cli/cmd/cron"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -149,6 +150,7 @@ const cli = yargs(hideBin(process.argv))
   .command(WebCommand)
   .command(ModelsCommand)
   .command(VisionCommand)
+  .command(CronCommand)
   .command(StatsCommand)
   .command(ExportCommand)
   .command(ImportCommand)

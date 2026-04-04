@@ -25,6 +25,7 @@ import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { EventRoutes } from "./routes/event"
+import { CronRoutes } from "./routes/cron"
 import { errorHandler } from "./middleware"
 
 const log = Log.create({ service: "server" })
@@ -55,6 +56,7 @@ export const InstanceRoutes = (app?: Hono) =>
     .route("/", EventRoutes())
     .route("/mcp", McpRoutes())
     .route("/tui", TuiRoutes())
+    .route("/cron", CronRoutes())
     .post(
       "/instance/dispose",
       describeRoute({

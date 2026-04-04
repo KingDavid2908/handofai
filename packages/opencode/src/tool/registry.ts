@@ -19,6 +19,7 @@ import { SkillsListTool } from "./skills-list"
 import { ProcessTool } from "./process"
 import { MixtureOfAgentsTool } from "./mixture-of-agents"
 import { VisionTool } from "./vision"
+import { CronjobTool } from "./cronjob"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Config } from "../config/config"
@@ -144,6 +145,7 @@ export namespace ToolRegistry {
           ProcessTool,
           VisionTool,
           MixtureOfAgentsTool,
+          CronjobTool,
           ApplyPatchTool,
           ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
           ...(cfg.experimental?.batch_tool === true ? [BatchTool] : []),
