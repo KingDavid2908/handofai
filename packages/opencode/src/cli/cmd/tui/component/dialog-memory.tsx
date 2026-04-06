@@ -268,6 +268,8 @@ export function DialogMemory() {
                 flush_min_turns: memCfg.flush_min_turns ?? 6,
                 memory_char_limit: memCfg.memory_char_limit ?? 2200,
                 user_char_limit: memCfg.user_char_limit ?? 1375,
+                skill_creation_nudge_interval: memCfg.skill_creation_nudge_interval ?? 10,
+                review_enabled: memCfg.review_enabled ?? true,
               },
             })
             toast.show({ message: `Memory ${next ? "enabled" : "disabled"}`, variant: "success" })

@@ -1109,9 +1109,18 @@ export namespace Config {
           flush_min_turns: z.number().default(6).describe("Minimum turns before memory flush on compaction (default: 6)"),
           memory_char_limit: z.number().default(2200).describe("Max chars for MEMORY.md (default: 2200)"),
           user_char_limit: z.number().default(1375).describe("Max chars for USER.md (default: 1375)"),
+          skill_creation_nudge_interval: z.number().default(10).describe("Tool-use iterations before skill review triggers (default: 10)"),
+          review_enabled: z.boolean().default(true).describe("Enable background review agent (default: true)"),
         })
         .optional()
         .describe("Memory system configuration for persistent cross-session learning"),
+      lessons: z
+        .object({
+          enabled: z.boolean().default(true).describe("Enable lessons injection into system prompt (default: true). Tool and writing are always available."),
+          char_limit: z.number().default(2200).describe("Max chars for LESSONS.md (default: 2200)"),
+        })
+        .optional()
+        .describe("Lessons system configuration for agent-learned patterns from corrections, failures, and successes"),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),

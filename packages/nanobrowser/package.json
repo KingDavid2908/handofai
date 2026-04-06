@@ -1,0 +1,35 @@
+{
+  "name": "@opencode-ai/nanobrowser",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "bun run --cwd chrome-extension dev",
+    "build": "bun run --cwd chrome-extension build",
+    "lint": "bun run --cwd chrome-extension lint",
+    "type-check": "bun run --cwd chrome-extension type-check"
+  },
+  "devDependencies": {
+    "@laynezh/vite-plugin-lib-assets": "0",
+    "cross-env": "7",
+    "deepmerge": "4",
+    "magic-string": "0",
+    "ts-loader": "9",
+    "vite": "7"
+  },
+  "dependencies": {
+    "@langchain/anthropic": "0.3.33",
+    "@langchain/cerebras": "0.0.4",
+    "@langchain/core": "0.3.79",
+    "@langchain/deepseek": "0.1.0",
+    "@langchain/google-genai": "0.2.18",
+    "@langchain/groq": "0.2.4",
+    "@langchain/ollama": "0.2.4",
+    "@langchain/openai": "0.6.16",
+    "@langchain/xai": "0.1.0",
+    "jsonrepair": "3",
+    "posthog-js": "1.364.7",
+    "puppeteer-core": "24",
+    "webextension-polyfill": "0.12.0",
+    "zod": "3",
+    "zod-to-json-schema": "3"
+  }
+}

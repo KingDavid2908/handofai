@@ -27,6 +27,8 @@ export namespace MemoryService {
     readonly reload: () => Effect.Effect<void>
     readonly incrementTurn: (sessionID: SessionID) => Effect.Effect<void>
     readonly checkNudge: (sessionID: SessionID) => Effect.Effect<boolean>
+    readonly incrementSkillTurns: (sessionID: SessionID) => Effect.Effect<void>
+    readonly checkSkillNudge: (sessionID: SessionID) => Effect.Effect<boolean>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/MemoryService") {}
@@ -93,6 +95,16 @@ export namespace MemoryService {
         return MemoryNudge.shouldTrigger(sessionID, nudgeInterval)
       })
 
+      const incrementSkillTurns = Effect.fn("MemoryService.incrementSkillTurns")(function* (sessionID: SessionID) {
+        MemoryNudge.incrementSkillTurns(sessionID)
+      })
+
+      const checkSkillNudge = Effect.fn("MemoryService.checkSkillNudge")(function* (sessionID: SessionID) {
+        const cfg = yield* config.get()
+        const interval = cfg.memory?.skill_creation_nudge_interval ?? 10
+        return MemoryNudge.shouldTriggerSkillReview(sessionID, interval)
+      })
+
       return Service.of({
         init,
         load,
@@ -104,6 +116,8 @@ export namespace MemoryService {
         reload,
         incrementTurn,
         checkNudge,
+        incrementSkillTurns,
+        checkSkillNudge,
       })
     }),
   ).pipe(Layer.orDie)
@@ -152,5 +166,13 @@ export namespace MemoryService {
 
   export function checkNudge(sessionID: SessionID) {
     return runPromise((s) => s.checkNudge(sessionID))
+  }
+
+  export function incrementSkillTurns(sessionID: SessionID) {
+    return runPromise((s) => s.incrementSkillTurns(sessionID))
+  }
+
+  export function checkSkillNudge(sessionID: SessionID) {
+    return runPromise((s) => s.checkSkillNudge(sessionID))
   }
 }

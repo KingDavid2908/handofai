@@ -13,6 +13,7 @@ import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
+import { NanoBrowserBridge } from "@/tool/browser/bridge"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -376,9 +377,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             this.set(variants[index + 1])
           },
         },
-        setVisionModel(modelEntry: { providerID: string; modelID: string } | null) {
+        async setVisionModel(modelEntry: { providerID: string; modelID: string } | null) {
           setModelStore("visionModel", modelEntry)
           save()
+
+          // Notify bridge to send updated config to extension
+          const bridge = NanoBrowserBridge.getInstance()
+          await bridge.broadcastProviderConfig().catch(() => {
+            // Extension may not be connected, that's ok
+          })
         },
         get visionModel() {
           return modelStore.visionModel

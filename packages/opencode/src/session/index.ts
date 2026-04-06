@@ -18,6 +18,7 @@ import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
 import { updateSchema } from "../util/update-schema"
 import { MessageV2 } from "./message-v2"
+import { MemoryNudge } from "../memory/nudge"
 import { Instance } from "../project/instance"
 import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
@@ -461,6 +462,7 @@ export namespace Session {
           }
           yield* unshare(sessionID).pipe(Effect.ignore)
           yield* Effect.sync(() => {
+            MemoryNudge.cleanup(sessionID)
             SyncEvent.run(Event.Deleted, { sessionID, info: session })
             SyncEvent.remove(sessionID)
           })

@@ -14,12 +14,14 @@ import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import { SessionSearchTool } from "./session-search"
 import { MemoryTool } from "./memory"
+import { LessonTool } from "./lesson"
 import { SkillManageTool } from "./skill-manage"
 import { SkillsListTool } from "./skills-list"
 import { ProcessTool } from "./process"
 import { MixtureOfAgentsTool } from "./mixture-of-agents"
 import { VisionTool } from "./vision"
 import { CronjobTool } from "./cronjob"
+import { BrowserTool } from "./browser"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Config } from "../config/config"
@@ -139,6 +141,7 @@ export namespace ToolRegistry {
           CodeSearchTool,
           SessionSearchTool,
           MemoryTool,
+          LessonTool,
           SkillTool,
           SkillsListTool,
           SkillManageTool,
@@ -146,6 +149,7 @@ export namespace ToolRegistry {
           VisionTool,
           MixtureOfAgentsTool,
           CronjobTool,
+          BrowserTool,
           ApplyPatchTool,
           ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
           ...(cfg.experimental?.batch_tool === true ? [BatchTool] : []),

@@ -18,18 +18,41 @@ const REVIEW_PROMPT = `Review this conversation and save any important informati
 3. Important technical decisions and context
 4. Project goals and progress
 5. Any unresolved items
+6. Permission corrections — did the user reject or correct a tool usage?
 
 Use the memory tool to save user-related facts to "user" target, and project/task notes to "memory" target.
 Keep entries concise. Only save information that would be useful in future sessions.
 If nothing worth remembering was discussed, do not call the memory tool.`
 
 export namespace MemoryNudge {
-  const sessions = new Map<string, { turns: number; pending: boolean }>()
+  const sessions = new Map<string, {
+    turns: number
+    pending: boolean
+    skillTurns: number
+  }>()
 
   export function incrementTurn(sessionID: string) {
-    const state = sessions.get(sessionID) ?? { turns: 0, pending: false }
+    const state = sessions.get(sessionID) ?? { turns: 0, pending: false, skillTurns: 0 }
     state.turns++
     sessions.set(sessionID, state)
+  }
+
+  export function incrementSkillTurns(sessionID: string) {
+    const state = sessions.get(sessionID) ?? { turns: 0, pending: false, skillTurns: 0 }
+    state.skillTurns++
+    sessions.set(sessionID, state)
+  }
+
+  export function resetSkillTurns(sessionID: string) {
+    const state = sessions.get(sessionID)
+    if (state) state.skillTurns = 0
+  }
+
+  export function shouldTriggerSkillReview(sessionID: string, interval: number): boolean {
+    const state = sessions.get(sessionID)
+    if (!state) return false
+    if (state.pending) return false
+    return state.skillTurns >= interval
   }
 
   export function shouldTrigger(sessionID: string, interval: number): boolean {
@@ -47,6 +70,10 @@ export namespace MemoryNudge {
     }
   }
 
+  export function cleanup(sessionID: string) {
+    sessions.delete(sessionID)
+  }
+
   export async function review(input: {
     sessionID: SessionID
     model: { providerID: string; modelID: string }
@@ -58,21 +85,19 @@ export namespace MemoryNudge {
     state.pending = true
     log.info("starting memory review", { sessionID: input.sessionID })
 
+    let reviewSessionID: SessionID | undefined
+
     try {
-      const config = await Config.get()
-      const nudgeInterval = config.memory?.nudge_interval ?? 10
-
-      const msgs = await Session.messages({ sessionID: input.sessionID })
-      const recentMsgs = msgs.slice(-Math.min(msgs.length, 20))
-
       const reviewSession = await Session.create({
         parentID: input.sessionID,
         title: "Memory Review",
         permission: input.agent.permission,
       })
 
+      reviewSessionID = reviewSession.id as SessionID
+
       const result = await SessionPrompt.prompt({
-        sessionID: reviewSession.id,
+        sessionID: reviewSessionID,
         model: {
           providerID: input.model.providerID as ProviderID,
           modelID: input.model.modelID as ModelID,
@@ -82,12 +107,13 @@ export namespace MemoryNudge {
         tools: { memory: true },
       })
 
-      reset(input.sessionID)
       log.info("memory review complete", { sessionID: input.sessionID })
-
-      await Session.remove(reviewSession.id)
     } catch (e) {
       log.error("memory review failed", { sessionID: input.sessionID, error: e })
+    } finally {
+      if (reviewSessionID) {
+        await Session.remove(reviewSessionID).catch(() => {})
+      }
       reset(input.sessionID)
     }
   }

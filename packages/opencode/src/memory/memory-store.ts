@@ -32,6 +32,17 @@ const INVISIBLE_UNICODE_PATTERNS = [
   /\u202A|\u202B|\u202D|\u202E/,
 ]
 
+const META_MESSAGE_PATTERNS = [
+  /^nothing\s+to\s+save/i,
+  /^session\s+review/i,
+  /^no\s+(new\s+)?information\s+to\s+save/i,
+  /^nothing\s+(is\s+)?worth\s+(saving|remembering)/i,
+  /^no\s+changes\s+needed/i,
+  /^review\s+complete/i,
+  /^memory\s+review\s+(done|complete|finished)/i,
+  /^nothing\s+stands?\s+out/i,
+]
+
 export namespace MemoryStore {
   export type Target = "memory" | "user"
 
@@ -251,6 +262,9 @@ export namespace MemoryStore {
     }
     for (const pattern of INVISIBLE_UNICODE_PATTERNS) {
       if (pattern.test(content)) return "Content blocked: contains invisible Unicode characters"
+    }
+    for (const pattern of META_MESSAGE_PATTERNS) {
+      if (pattern.test(content)) return `Content blocked: appears to be a review status message, not a memory entry`
     }
     return null
   }

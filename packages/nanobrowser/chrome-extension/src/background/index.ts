@@ -1,0 +1,506 @@
+import 'webextension-polyfill';
+import {
+  agentModelStore,
+  AgentNameEnum,
+  firewallStore,
+  generalSettingsStore,
+  llmProviderStore,
+  analyticsSettingsStore,
+} from '@extension/storage';
+import { t } from '@extension/i18n';
+import BrowserContext from './browser/context';
+import { Executor } from './agent/executor';
+import { createLogger } from './log';
+import { ExecutionState } from './agent/event/types';
+import { createChatModel, createProxiedChatModel } from './agent/helper';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { DEFAULT_AGENT_OPTIONS } from './agent/types';
+import { SpeechToTextService } from './services/speechToText';
+import { injectBuildDomTreeScripts } from './browser/dom/service';
+import { analytics } from './services/analytics';
+
+const logger = createLogger('background');
+
+const browserContext = new BrowserContext({});
+let currentExecutor: Executor | null = null;
+let currentPort: chrome.runtime.Port | null = null;
+const SIDE_PANEL_URL = chrome.runtime.getURL('side-panel/index.html');
+
+// Setup side panel behavior
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(error => console.error(error));
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (tabId && changeInfo.status === 'complete' && tab.url?.startsWith('http')) {
+    await injectBuildDomTreeScripts(tabId);
+  }
+});
+
+// Listen for debugger detached event
+// if canceled_by_user, remove the tab from the browser context
+chrome.debugger.onDetach.addListener(async (source, reason) => {
+  console.log('Debugger detached:', source, reason);
+  if (reason === 'canceled_by_user') {
+    if (source.tabId) {
+      currentExecutor?.cancel();
+      await browserContext.cleanup();
+    }
+  }
+});
+
+// Cleanup when tab is closed
+chrome.tabs.onRemoved.addListener(tabId => {
+  browserContext.removeAttachedPage(tabId);
+});
+
+logger.info('background loaded');
+
+// Initialize analytics
+analytics.init().catch(error => {
+  logger.error('Failed to initialize analytics:', error);
+});
+
+// Listen for analytics settings changes
+analyticsSettingsStore.subscribe(() => {
+  analytics.updateSettings().catch(error => {
+    logger.error('Failed to update analytics settings:', error);
+  });
+});
+
+// Listen for simple messages (e.g., from options page)
+chrome.runtime.onMessage.addListener(() => {
+  // Handle other message types if needed in the future
+  // Return false if response is not sent asynchronously
+  // return false;
+});
+
+// Setup connection listener for long-lived connections (e.g., side panel)
+chrome.runtime.onConnect.addListener(port => {
+  if (port.name === 'side-panel-connection') {
+    const senderUrl = port.sender?.url;
+    const senderId = port.sender?.id;
+
+    if (!senderUrl || senderId !== chrome.runtime.id || senderUrl !== SIDE_PANEL_URL) {
+      logger.warning('Blocked unauthorized side-panel-connection', senderId, senderUrl);
+      port.disconnect();
+      return;
+    }
+
+    currentPort = port;
+
+    port.onMessage.addListener(async message => {
+      try {
+        switch (message.type) {
+          case 'heartbeat':
+            // Acknowledge heartbeat
+            port.postMessage({ type: 'heartbeat_ack' });
+            break;
+
+          case 'new_task': {
+            if (!message.task) return port.postMessage({ type: 'error', error: t('bg_cmd_newTask_noTask') });
+            if (!message.tabId) return port.postMessage({ type: 'error', error: t('bg_errors_noTabId') });
+
+            logger.info('new_task', message.tabId, message.task);
+            currentExecutor = await setupExecutor(message.taskId, message.task, browserContext);
+            subscribeToExecutorEvents(currentExecutor);
+
+            const result = await currentExecutor.execute();
+            logger.info('new_task execution result', message.tabId, result);
+            break;
+          }
+
+          case 'follow_up_task': {
+            if (!message.task) return port.postMessage({ type: 'error', error: t('bg_cmd_followUpTask_noTask') });
+            if (!message.tabId) return port.postMessage({ type: 'error', error: t('bg_errors_noTabId') });
+
+            logger.info('follow_up_task', message.tabId, message.task);
+
+            // If executor exists, add follow-up task
+            if (currentExecutor) {
+              currentExecutor.addFollowUpTask(message.task);
+              // Re-subscribe to events in case the previous subscription was cleaned up
+              subscribeToExecutorEvents(currentExecutor);
+              const result = await currentExecutor.execute();
+              logger.info('follow_up_task execution result', message.tabId, result);
+            } else {
+              // executor was cleaned up, can not add follow-up task
+              logger.info('follow_up_task: executor was cleaned up, can not add follow-up task');
+              return port.postMessage({ type: 'error', error: t('bg_cmd_followUpTask_cleaned') });
+            }
+            break;
+          }
+
+          case 'cancel_task': {
+            if (!currentExecutor) return port.postMessage({ type: 'error', error: t('bg_errors_noRunningTask') });
+            await currentExecutor.cancel();
+            break;
+          }
+
+          case 'resume_task': {
+            if (!currentExecutor) return port.postMessage({ type: 'error', error: t('bg_cmd_resumeTask_noTask') });
+            await currentExecutor.resume();
+            return port.postMessage({ type: 'success' });
+          }
+
+          case 'pause_task': {
+            if (!currentExecutor) return port.postMessage({ type: 'error', error: t('bg_errors_noRunningTask') });
+            await currentExecutor.pause();
+            return port.postMessage({ type: 'success' });
+          }
+
+          case 'screenshot': {
+            if (!message.tabId) return port.postMessage({ type: 'error', error: t('bg_errors_noTabId') });
+            const page = await browserContext.switchTab(message.tabId);
+            const screenshot = await page.takeScreenshot();
+            logger.info('screenshot', message.tabId, screenshot);
+            return port.postMessage({ type: 'success', screenshot });
+          }
+
+          case 'state': {
+            try {
+              const browserState = await browserContext.getState(true);
+              const elementsText = browserState.elementTree.clickableElementsToString(
+                DEFAULT_AGENT_OPTIONS.includeAttributes,
+              );
+
+              logger.info('state', browserState);
+              logger.info('interactive elements', elementsText);
+              return port.postMessage({ type: 'success', msg: t('bg_cmd_state_printed') });
+            } catch (error) {
+              logger.error('Failed to get state:', error);
+              return port.postMessage({ type: 'error', error: t('bg_cmd_state_failed') });
+            }
+          }
+
+          case 'nohighlight': {
+            const page = await browserContext.getCurrentPage();
+            await page.removeHighlight();
+            return port.postMessage({ type: 'success', msg: t('bg_cmd_nohighlight_ok') });
+          }
+
+          case 'speech_to_text': {
+            try {
+              if (!message.audio) {
+                return port.postMessage({
+                  type: 'speech_to_text_error',
+                  error: t('bg_cmd_stt_noAudioData'),
+                });
+              }
+
+              logger.info('Processing speech-to-text request...');
+
+              // Get all providers for speech-to-text service
+              const providers = await llmProviderStore.getAllProviders();
+
+              // Create speech-to-text service with all providers
+              const speechToTextService = await SpeechToTextService.create(providers);
+
+              // Extract base64 audio data (remove data URL prefix if present)
+              let base64Audio = message.audio;
+              if (base64Audio.startsWith('data:')) {
+                base64Audio = base64Audio.split(',')[1];
+              }
+
+              // Transcribe audio
+              const transcribedText = await speechToTextService.transcribeAudio(base64Audio);
+
+              logger.info('Speech-to-text completed successfully');
+              return port.postMessage({
+                type: 'speech_to_text_result',
+                text: transcribedText,
+              });
+            } catch (error) {
+              logger.error('Speech-to-text failed:', error);
+              return port.postMessage({
+                type: 'speech_to_text_error',
+                error: error instanceof Error ? error.message : t('bg_cmd_stt_failed'),
+              });
+            }
+          }
+
+          case 'replay': {
+            if (!message.tabId) return port.postMessage({ type: 'error', error: t('bg_errors_noTabId') });
+            if (!message.taskId) return port.postMessage({ type: 'error', error: t('bg_errors_noTaskId') });
+            if (!message.historySessionId)
+              return port.postMessage({ type: 'error', error: t('bg_cmd_replay_noHistory') });
+            logger.info('replay', message.tabId, message.taskId, message.historySessionId);
+
+            try {
+              // Switch to the specified tab
+              await browserContext.switchTab(message.tabId);
+              // Setup executor with the new taskId and a dummy task description
+              currentExecutor = await setupExecutor(message.taskId, message.task, browserContext);
+              subscribeToExecutorEvents(currentExecutor);
+
+              // Run replayHistory with the history session ID
+              const result = await currentExecutor.replayHistory(message.historySessionId);
+              logger.debug('replay execution result', message.tabId, result);
+            } catch (error) {
+              logger.error('Replay failed:', error);
+              return port.postMessage({
+                type: 'error',
+                error: error instanceof Error ? error.message : t('bg_cmd_replay_failed'),
+              });
+            }
+            break;
+          }
+
+          default:
+            return port.postMessage({ type: 'error', error: t('errors_cmd_unknown', [message.type]) });
+        }
+      } catch (error) {
+        console.error('Error handling port message:', error);
+        port.postMessage({
+          type: 'error',
+          error: error instanceof Error ? error.message : t('errors_unknown'),
+        });
+      }
+    });
+
+    port.onDisconnect.addListener(() => {
+      // this event is also triggered when the side panel is closed, so we need to cancel the task
+      console.log('Side panel disconnected');
+      currentPort = null;
+      currentExecutor?.cancel();
+    });
+  }
+});
+
+async function setupExecutor(taskId: string, task: string, browserContext: BrowserContext, opts?: {
+  proxiedLlm?: boolean
+  wsSend?: (msg: string) => void
+  pendingLlmCalls?: Map<string, { resolve: (r: any) => void; reject: (e: Error) => void }>
+  llmCallCounter?: { value: number }
+}) {
+  const providers = await llmProviderStore.getAllProviders();
+  // if no providers, need to display the options page
+  if (Object.keys(providers).length === 0) {
+    throw new Error(t('bg_setup_noApiKeys'));
+  }
+
+  // Clean up any legacy validator settings for backward compatibility
+  await agentModelStore.cleanupLegacyValidatorSettings();
+
+  const agentModels = await agentModelStore.getAllAgentModels();
+  // verify if every provider used in the agent models exists in the providers
+  for (const agentModel of Object.values(agentModels)) {
+    if (!providers[agentModel.provider]) {
+      throw new Error(t('bg_setup_noProvider', [agentModel.provider]));
+    }
+  }
+
+  const navigatorModel = agentModels[AgentNameEnum.Navigator];
+  if (!navigatorModel) {
+    throw new Error(t('bg_setup_noNavigatorModel'));
+  }
+  // Log the provider config being used for the navigator
+  const navigatorProviderConfig = providers[navigatorModel.provider];
+  const navigatorLLM = opts?.proxiedLlm && opts?.wsSend && opts?.pendingLlmCalls && opts?.llmCallCounter
+    ? createProxiedChatModel(navigatorProviderConfig, navigatorModel, opts.wsSend, opts.pendingLlmCalls, opts.llmCallCounter)
+    : createChatModel(navigatorProviderConfig, navigatorModel);
+
+  let plannerLLM: BaseChatModel | null = null;
+  const plannerModel = agentModels[AgentNameEnum.Planner];
+  if (plannerModel) {
+    // Log the provider config being used for the planner
+    const plannerProviderConfig = providers[plannerModel.provider];
+    plannerLLM = opts?.proxiedLlm && opts?.wsSend && opts?.pendingLlmCalls && opts?.llmCallCounter
+      ? createProxiedChatModel(plannerProviderConfig, plannerModel, opts.wsSend, opts.pendingLlmCalls, opts.llmCallCounter)
+      : createChatModel(plannerProviderConfig, plannerModel);
+  }
+
+  // Apply firewall settings to browser context
+  const firewall = await firewallStore.getFirewall();
+  if (firewall.enabled) {
+    browserContext.updateConfig({
+      allowedUrls: firewall.allowList,
+      deniedUrls: firewall.denyList,
+    });
+  } else {
+    browserContext.updateConfig({
+      allowedUrls: [],
+      deniedUrls: [],
+    });
+  }
+
+  const generalSettings = await generalSettingsStore.getSettings();
+  browserContext.updateConfig({
+    minimumWaitPageLoadTime: generalSettings.minWaitPageLoad / 1000.0,
+    displayHighlights: generalSettings.displayHighlights,
+  });
+
+  const executor = new Executor(task, taskId, browserContext, navigatorLLM, {
+    plannerLLM: plannerLLM ?? navigatorLLM,
+    agentOptions: {
+      maxSteps: generalSettings.maxSteps,
+      maxFailures: generalSettings.maxFailures,
+      maxActionsPerStep: generalSettings.maxActionsPerStep,
+      useVision: generalSettings.useVision,
+      useVisionForPlanner: true,
+      planningInterval: generalSettings.planningInterval,
+    },
+    generalSettings: generalSettings,
+  });
+
+  return executor;
+}
+
+// Update subscribeToExecutorEvents to use port and WebSocket
+async function subscribeToExecutorEvents(executor: Executor) {
+  // Clear previous event listeners to prevent multiple subscriptions
+  executor.clearExecutionEvents();
+
+  // Subscribe to new events
+  executor.subscribeExecutionEvents(async event => {
+    try {
+      // Send to side panel (if connected)
+      if (currentPort) {
+        currentPort.postMessage(event);
+      }
+      
+      // Send to handofai via WebSocket (if connected)
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'execution_event',
+          event: {
+            actor: event.actor,
+            state: event.state,
+            data: event.data,
+            timestamp: event.timestamp,
+          }
+        }));
+      }
+    } catch (error) {
+      logger.error('Failed to send message:', error);
+    }
+
+    if (
+      event.state === ExecutionState.TASK_OK ||
+      event.state === ExecutionState.TASK_FAIL ||
+      event.state === ExecutionState.TASK_CANCEL
+    ) {
+      await currentExecutor?.cleanup();
+    }
+  });
+}
+
+// ============================================================
+// WebSocket bridge to handofai (NEW — appends to existing code)
+// ============================================================
+
+let ws: WebSocket | null = null
+let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null
+
+function connectToHandofai() {
+  ws = new WebSocket('ws://localhost:18889')
+
+  ws.onopen = () => {
+    console.log('[NanoBrowser] Connected to handofai')
+    ws!.send(JSON.stringify({ type: 'ready', extensionId: chrome.runtime.id }))
+  }
+
+  ws.onmessage = async (event) => {
+    try {
+      const message = JSON.parse(event.data)
+
+      // Handle provider config from handofai
+      if (message.type === 'provider_config') {
+        console.log('[NanoBrowser] Received provider_config:', JSON.stringify(message.config, null, 2))
+        await chrome.storage.local.set({
+          'llm-api-keys': { providers: message.config.providers },
+          'agent-models': { agents: message.config.agents },
+        })
+        console.log('[NanoBrowser] Provider config saved to storage')
+        // Verify it was saved
+        const stored = await chrome.storage.local.get(['llm-api-keys', 'agent-models'])
+        console.log('[NanoBrowser] Verified stored config:', JSON.stringify(stored, null, 2))
+        return
+      }
+
+      if (message.type === 'execute_task') {
+        const result = await handleExecuteTask(message)
+        ws!.send(JSON.stringify({ type: 'result', id: message.id, ...result }))
+      }
+
+      if (message.type === 'llm_response') {
+        resolveLlmCall(message.id, message.response)
+      }
+
+      if (message.type === 'llm_error') {
+        resolveLlmCallError(message.id, message.error)
+      }
+    } catch (err) {
+      console.error('[NanoBrowser] Error handling message:', err)
+    }
+  }
+
+  ws.onclose = () => {
+    console.log('[NanoBrowser] Disconnected, reconnecting in 3s...')
+    wsReconnectTimer = setTimeout(connectToHandofai, 3000)
+  }
+
+  ws.onerror = (err) => {
+    console.error('[NanoBrowser] WebSocket error:', err)
+  }
+}
+
+setInterval(() => {
+  if (ws?.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'heartbeat' }))
+  }
+}, 30000)
+
+connectToHandofai()
+
+// LLM call tracking
+const pendingLlmCalls = new Map<string, {
+  resolve: (response: any) => void
+  reject: (error: Error) => void
+}>()
+let llmCallCounter = 0
+
+function resolveLlmCall(id: string, response: any) {
+  const pending = pendingLlmCalls.get(id)
+  if (pending) {
+    pendingLlmCalls.delete(id)
+    pending.resolve(response)
+  }
+}
+
+function resolveLlmCallError(id: string, error: string) {
+  const pending = pendingLlmCalls.get(id)
+  if (pending) {
+    pendingLlmCalls.delete(id)
+    pending.reject(new Error(error))
+  }
+}
+
+async function handleExecuteTask(message: any) {
+  try {
+    const providers = await llmProviderStore.getAllProviders()
+    console.log('[NanoBrowser] handleExecuteTask - providers:', JSON.stringify(providers, null, 2))
+    
+    if (Object.keys(providers).length === 0) {
+      return {
+        success: false,
+        error: 'No provider configured. Please ensure handofai is running and a vision model is set (run: handofaicli vision <provider>/<model>)'
+      }
+    }
+
+    const agentModels = await agentModelStore.getAllAgentModels()
+    console.log('[NanoBrowser] handleExecuteTask - agent models:', JSON.stringify(agentModels, null, 2))
+
+    const executor = await setupExecutor(message.id, message.task, browserContext, {
+      proxiedLlm: false,
+      wsSend: (msg: string) => ws?.send(msg),
+      pendingLlmCalls,
+      llmCallCounter: { value: llmCallCounter++ },
+    })
+    subscribeToExecutorEvents(executor)
+    await executor.execute()
+    // Get the final answer from the executor's context
+    const finalAnswer = (executor as any).context?.finalAnswer || 'Task completed but no answer was provided'
+    return { success: true, result: finalAnswer }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}

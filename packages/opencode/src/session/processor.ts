@@ -19,6 +19,8 @@ import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
+import { MemoryNudge } from "@/memory/nudge"
+import { LessonStore } from "@/lessons/lesson-store"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -230,6 +232,9 @@ export namespace SessionProcessor {
                 },
               })
               delete ctx.toolcalls[value.toolCallId]
+              if (match.tool === "skill_manage") {
+                MemoryNudge.resetSkillTurns(ctx.sessionID)
+              }
               return
             }
 
@@ -245,8 +250,17 @@ export namespace SessionProcessor {
                   time: { start: match.state.time.start, end: Date.now() },
                 },
               })
-              if (value.error instanceof Permission.RejectedError || value.error instanceof Question.RejectedError) {
+              if (value.error instanceof Permission.RejectedError || value.error instanceof Permission.CorrectedError || value.error instanceof Question.RejectedError) {
                 ctx.blocked = ctx.shouldBreak
+              }
+              if (value.error instanceof Permission.CorrectedError) {
+                const feedback = value.error.feedback
+                yield* Effect.promise(async () => {
+                  try {
+                    if (!LessonStore.isInitialized()) await LessonStore.init()
+                    await LessonStore.add(`User correction: ${feedback}`)
+                  } catch {}
+                }).pipe(Effect.ignoreCause({ log: false, message: "lesson auto-save failed" }), Effect.forkDetach)
               }
               delete ctx.toolcalls[value.toolCallId]
               return

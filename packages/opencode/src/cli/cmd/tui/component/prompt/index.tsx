@@ -36,6 +36,8 @@ import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
 import { DialogMemory } from "../dialog-memory"
+import { DialogLessons } from "../dialog-lessons"
+import { DialogBrowser } from "../dialog-browser"
 
 export type PromptProps = {
   sessionID?: string
@@ -530,6 +532,28 @@ export function Prompt(props: PromptProps) {
       },
       onSelect: (dialog) => {
         dialog.replace(() => <DialogMemory />)
+      },
+    },
+    {
+      title: "Lessons",
+      value: "lessons",
+      keybind: "lessons",
+      category: "Lessons",
+      slash: {
+        name: "lessons",
+      },
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogLessons />)
+      },
+    },
+    {
+      title: "Browser",
+      value: "browser",
+      keybind: "browser",
+      category: "Browser",
+      slash: { name: "browser" },
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogBrowser />)
       },
     },
     {

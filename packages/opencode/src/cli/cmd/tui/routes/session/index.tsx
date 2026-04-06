@@ -1486,6 +1486,8 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
 
   // Hide tool if showDetails is false and tool completed successfully
   const shouldHide = createMemo(() => {
+    const meta = props.part.state.status === "completed" ? props.part.state.metadata : undefined
+    if (meta?.silent) return true
     if (ctx.showDetails()) return false
     if (props.part.state.status !== "completed") return false
     return true

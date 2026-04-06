@@ -6,6 +6,7 @@ import { Provider } from "../../provider/provider"
 import { UI } from "../ui"
 import { bootstrap } from "../bootstrap"
 import { cmd } from "./cmd"
+import { NanoBrowserBridge } from "../../tool/browser/bridge"
 
 const STATE_FILE = path.join(Global.Path.state, "model.json")
 
@@ -78,6 +79,12 @@ export const VisionCommand = cmd({
       state.visionModel = { providerID, modelID }
       await writeState(state)
       UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Vision model set to: ${args.model}` + UI.Style.TEXT_NORMAL)
+
+      // Notify bridge to send updated config to extension
+      const bridge = NanoBrowserBridge.getInstance()
+      await bridge.broadcastProviderConfig().catch(() => {
+        // Extension may not be connected, that's ok
+      })
     })
   },
 })

@@ -91,6 +91,10 @@ const createEmbeddedWebUIBundle = async () => {
 
 const embeddedFileMap = skipEmbedWebUi ? null : await createEmbeddedWebUIBundle()
 
+// Embed NanoBrowser source so `browser setup` can build it at runtime
+const nanobrowserDir = path.join(import.meta.dirname, "../../nanobrowser")
+const nanobrowserDist = path.join(nanobrowserDir, "dist")
+
 const allTargets: {
   os: string
   arch: "arm64" | "x64"
@@ -247,6 +251,51 @@ for (const item of targets) {
   }
 
   await $`rm -rf ./dist/${name}/bin/tui`
+
+  // Embed NanoBrowser pre-built dist into binary
+  // The extension is built at build time — no runtime build needed
+  if (fs.existsSync(nanobrowserDir)) {
+    const distSrc = path.join(nanobrowserDir, "dist")
+    if (fs.existsSync(distSrc)) {
+      const target = `./dist/${name}/bin/nanobrowser-dist`
+      await $`mkdir -p ${target}`
+      try { await $`robocopy ${distSrc} ${target} /E /NFL /NDL /NJH /NJS /nc /ns /np` } catch {}
+      // Fix manifest: add version, set default_locale, use plain strings
+      const manifestPath = path.join(target, "manifest.json")
+      if (fs.existsSync(manifestPath)) {
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+        if (!manifest.version) manifest.version = "1.0.0"
+        manifest.default_locale = "en"
+        manifest.name = "NanoBrowser"
+        manifest.description = "AI-powered browser automation"
+        fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2))
+      }
+      // Create missing stub files that Chrome requires but vite doesn't build
+      // Content script stub (manifest references it but vite only builds background)
+      const contentDir = path.join(target, "content")
+      if (!fs.existsSync(contentDir)) fs.mkdirSync(contentDir, { recursive: true })
+      await Bun.file(path.join(contentDir, "index.iife.js")).write(`// NanoBrowser content script stub\n// DOM interaction is done via chrome.scripting.executeScript with buildDomTree.js\n(function(){'use strict';})();\n`)
+      // Side panel HTML stub
+      const sidePanelDir = path.join(target, "side-panel")
+      if (!fs.existsSync(sidePanelDir)) fs.mkdirSync(sidePanelDir, { recursive: true })
+      await Bun.file(path.join(sidePanelDir, "index.html")).write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>NanoBrowser Side Panel</title><style>body{margin:0;padding:16px;font-family:system-ui,sans-serif;background:#1a1a2e;color:#eee}h1{font-size:18px;margin:0 0 8px}p{font-size:14px;color:#aaa}</style></head><body><h1>NanoBrowser</h1><p>AI-powered browser automation</p></body></html>`)
+      // Options HTML stub
+      const optionsDir = path.join(target, "options")
+      if (!fs.existsSync(optionsDir)) fs.mkdirSync(optionsDir, { recursive: true })
+      await Bun.file(path.join(optionsDir, "index.html")).write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>NanoBrowser Options</title><style>body{margin:0;padding:16px;font-family:system-ui,sans-serif;background:#1a1a2e;color:#eee}h1{font-size:18px;margin:0 0 8px}p{font-size:14px;color:#aaa}</style></head><body><h1>NanoBrowser Options</h1><p>Configure your LLM providers and agent settings.</p></body></html>`)
+      // Permission page stub
+      const permissionDir = path.join(target, "permission")
+      if (!fs.existsSync(permissionDir)) fs.mkdirSync(permissionDir, { recursive: true })
+      await Bun.file(path.join(permissionDir, "index.html")).write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>NanoBrowser Permission</title></head><body><div id="root"></div><script src="permission.js"><\/script></body></html>`)
+    }
+  }
+
+  // Embed bun.exe for browser setup command
+  const bunSrc = path.join(process.env.LOCALAPPDATA ?? "", "bun", "bun.exe")
+  if (fs.existsSync(bunSrc)) {
+    await $`copy ${bunSrc} ./dist/${name}/bin/bun.exe`
+  }
+
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
       {

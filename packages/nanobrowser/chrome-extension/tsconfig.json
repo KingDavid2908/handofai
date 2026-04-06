@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@src/*": ["src/*"],
+      "@extension/storage": ["../packages/storage/index.ts"],
+      "@extension/i18n": ["../packages/i18n/index.ts"],
+      "@extension/shared": ["../packages/shared/index.ts"],
+      "@extension/schema-utils": ["../packages/schema-utils/index.ts"],
+    }
+  },
+  "include": ["src", "utils", "vite.config.mts", "../node_modules/@types"]
+}

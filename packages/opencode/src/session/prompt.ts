@@ -20,6 +20,8 @@ import { SystemPrompt } from "./system"
 import { InstructionPrompt } from "./instruction"
 import { MemoryService } from "../memory"
 import { MemoryNudge } from "../memory/nudge"
+import { LessonService } from "@/lessons"
+import { BackgroundReview } from "../learning/review"
 import { Plugin } from "../plugin"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
@@ -37,6 +39,7 @@ import { spawn } from "child_process"
 import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
 import { ConfigMarkdown } from "../config/markdown"
+import { Config } from "../config/config"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
@@ -333,10 +336,27 @@ export namespace SessionPrompt {
         lastUser.id < lastAssistant.id
       ) {
         log.info("exiting loop", { sessionID })
+        const cfg = await Config.get()
+        const skillInterval = cfg.memory?.skill_creation_nudge_interval ?? 10
+        const shouldReviewSkills = MemoryNudge.shouldTriggerSkillReview(sessionID, skillInterval)
+        const shouldReviewMemory = await MemoryService.checkNudge(sessionID)
+        if (shouldReviewMemory || shouldReviewSkills) {
+          const exitingAgent = await Agent.get(lastUser.agent)
+          if (exitingAgent) {
+            BackgroundReview.execute({
+              sessionID,
+              model: lastUser.model,
+              agent: exitingAgent,
+              reviewMemory: shouldReviewMemory,
+              reviewSkills: shouldReviewSkills,
+            }).catch((e) => log.error("background review failed", { error: e }))
+          }
+        }
         break
       }
 
       step++
+      MemoryNudge.incrementSkillTurns(sessionID)
       if (step === 1)
         ensureTitle({
           session,
@@ -717,6 +737,21 @@ export namespace SessionPrompt {
         }
       }
 
+      // Inject lessons snapshot if initialized and enabled
+      const cfgLessons = await Config.get()
+      if (cfgLessons.lessons?.enabled !== false) {
+        await LessonService.load().catch(() => {})
+        const lessonSnapshot = await LessonService.getSnapshot()
+        if (lessonSnapshot && lessonSnapshot.lessons.trim()) {
+          system.push(
+            `══════════════════════════════════════════════\n` +
+            `LESSONS (learned from past mistakes) [${lessonSnapshot.usage.percent}% — ${lessonSnapshot.usage.used}/${lessonSnapshot.usage.limit} chars]\n` +
+            `══════════════════════════════════════════════\n` +
+            lessonSnapshot.lessons,
+          )
+        }
+      }
+
       const format = lastUser.format ?? { type: "text" }
       if (format.type === "json_schema") {
         system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
@@ -769,7 +804,22 @@ export namespace SessionPrompt {
         }
       }
 
-      if (result === "stop") break
+      if (result === "stop") {
+        const cfg = await Config.get()
+        const skillInterval = cfg.memory?.skill_creation_nudge_interval ?? 10
+        const shouldReviewSkills = MemoryNudge.shouldTriggerSkillReview(sessionID, skillInterval)
+        const shouldReviewMemory = await MemoryService.checkNudge(sessionID)
+        if (shouldReviewMemory || shouldReviewSkills) {
+          BackgroundReview.execute({
+            sessionID,
+            model: lastUser.model,
+            agent,
+            reviewMemory: shouldReviewMemory,
+            reviewSkills: shouldReviewSkills,
+          }).catch((e) => log.error("background review failed", { error: e }))
+        }
+        break
+      }
       if (result === "compact") {
         await SessionCompaction.create({
           sessionID,

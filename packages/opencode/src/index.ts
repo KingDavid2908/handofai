@@ -37,6 +37,8 @@ import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { VisionCommand } from "./cli/cmd/vision"
 import { CronCommand } from "./cli/cmd/cron"
+import { BrowserCommand } from "./cli/cmd/browser"
+import { NanoBrowserBridge } from "./tool/browser/bridge"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -151,6 +153,7 @@ const cli = yargs(hideBin(process.argv))
   .command(ModelsCommand)
   .command(VisionCommand)
   .command(CronCommand)
+  .command(BrowserCommand)
   .command(StatsCommand)
   .command(ExportCommand)
   .command(ImportCommand)
@@ -174,6 +177,21 @@ const cli = yargs(hideBin(process.argv))
   .strict()
 
 try {
+  const bridge = NanoBrowserBridge.getInstance()
+  try {
+    await bridge.start()
+    if (bridge.isOwner()) {
+      console.log(`[Bridge] Server started on port 18889`)
+    } else {
+      console.log(`[Bridge] Connected to existing server as client`)
+    }
+  } catch (startErr: any) {
+    console.warn("[Bridge] Browser automation unavailable:", startErr?.message || startErr)
+  }
+
+  process.on("SIGINT", async () => { await bridge.stop().catch(() => {}) })
+  process.on("SIGTERM", async () => { await bridge.stop().catch(() => {}) })
+
   await cli.parse()
 } catch (e) {
   let data: Record<string, any> = {}

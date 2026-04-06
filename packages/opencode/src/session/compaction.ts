@@ -21,6 +21,7 @@ import { makeRuntime } from "@/effect/run-service"
 import { isOverflow as overflow } from "./overflow"
 import { MemoryStore } from "@/memory/memory-store"
 import { MemoryTool } from "@/tool/memory"
+import { SkillManageTool } from "@/tool/skill-manage"
 import { ToolRegistry } from "@/tool/registry"
 import { LLM } from "./llm"
 import { Permission } from "@/permission"
@@ -41,7 +42,7 @@ export namespace SessionCompaction {
 
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
-  const PRUNE_PROTECTED_TOOLS = ["skill"]
+  const PRUNE_PROTECTED_TOOLS = ["skill", "skill_manage"]
 
   export interface Interface {
     readonly isOverflow: (input: {
@@ -184,6 +185,31 @@ export namespace SessionCompaction {
           },
         })
 
+        // Build skill-manage tool as AI SDK tool
+        const skillManageToolInfo = await SkillManageTool.init()
+        const skillManageAITool = tool({
+          id: SkillManageTool.id as any,
+          description: skillManageToolInfo.description,
+          inputSchema: jsonSchema(z.toJSONSchema(skillManageToolInfo.parameters) as any),
+          async execute(args: any, options) {
+            const result = await skillManageToolInfo.execute(args, {
+              sessionID: input.sessionID,
+              messageID: MessageID.ascending(),
+              agent: compactionAgent.name,
+              abort: input.abort,
+              callID: options.toolCallId,
+              extra: { model, bypassAgentCheck: true },
+              messages: input.messages,
+              metadata: async () => {},
+              ask: async () => {},
+            })
+            return {
+              output: result.output,
+              metadata: result.metadata,
+            }
+          },
+        })
+
         // Convert messages to model format
         const modelMessages = await MessageV2.toModelMessages(input.messages, model, { stripMedia: true })
 
@@ -191,8 +217,8 @@ export namespace SessionCompaction {
         const languageModel = await Provider.getLanguage(model).catch(() => null)
         if (!languageModel) return
 
-        // Stream with ONLY the memory tool
-        const flushPrompt = `[System: The session is being compacted. Save anything worth remembering to memory before the conversation history is summarized. ${sentinel}]`
+        // Stream with memory and skill-manage tools
+        const flushPrompt = `[System: The session is being compacted. Save anything worth remembering to memory. Also consider creating or updating skills if a reusable approach was discovered. If nothing is worth saving, do not call any tools. ${sentinel}]`
         try {
           const result = streamText({
             model: languageModel,
@@ -200,7 +226,7 @@ export namespace SessionCompaction {
               ...modelMessages,
               { role: "user", content: [{ type: "text", text: flushPrompt }] },
             ],
-            tools: { memory: memoryAITool },
+            tools: { memory: memoryAITool, skill_manage: skillManageAITool },
             abortSignal: input.abort,
           })
 
