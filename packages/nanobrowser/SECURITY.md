@@ -2,4 +2,4 @@
 
 ## Reporting a Vulnerability
 
-Please create a [Github Security Advisory](https://github.com/nanobrowser/nanobrowser/security/advisories/new)
+Please create a GitHub Security Advisory to report any security vulnerabilities responsibly.

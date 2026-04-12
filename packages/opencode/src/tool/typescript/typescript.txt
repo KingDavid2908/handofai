@@ -1,0 +1,147 @@
+Execute TypeScript code using Bun runtime. Write TypeScript code to interact with the filesystem, APIs, and system.
+
+The agent writes TypeScript code that is executed in a sandboxed environment with these globals available directly (NO need for require/import):
+
+## Shell Functions (globals - REPLACE bash tool)
+
+```typescript
+ls()           // List files in current directory
+ls("path")     // List files in specific directory  
+cat("file")    // Read file contents
+read("file")   // Same as cat
+cd("dir")      // Change directory
+pwd()          // Print working directory
+glob("*.ts")   // Find files matching pattern
+find("dir")    // Recursively find files
+grep("pattern", "file1", "file2") // Search in files
+mkdir("dir")   // Create directory
+rm("file")     // Remove file
+touch("file")  // Create empty file
+cp("src", "dest")   // Copy file
+mv("src", "dest")   // Move file
+ps()           // List processes
+kill(pid)      // Kill process
+write("file", "content") // Write file
+edit("file", "old", "new") // Edit file
+```
+
+## Shell Command Execution with Exit Codes
+
+```typescript
+// Execute shell command - returns structured output
+const result = $("npm install")
+// result = { stdout: "...", stderr: "...", exitCode: 0 }
+
+// Access individual fields
+console.log("Output:", result.stdout)
+console.log("Errors:", result.stderr)
+console.log("Exit code:", result.exitCode)
+
+// Run with timeout
+$("long-running-command", { timeout: 30000 }) // 30 seconds
+```
+
+## Background Processes
+
+```typescript
+// Spawn background process
+const proc = background.spawn("npm run dev")
+console.log("Started with PID:", proc.pid)
+
+// List running background processes
+const processes = background.list()
+
+// Check status
+const status = background.status(proc.pid)
+// status = { running: true, exitCode: undefined }
+
+// Kill background process
+background.kill(proc.pid)
+```
+
+## Console Output
+
+```typescript
+console.log("message")    // Output to result
+console.error("error")    // Error output
+console.info("info")      // Info output
+```
+
+## Process Info
+
+```typescript
+process.cwd()    // Current directory
+process.chdir("dir") // Change directory
+process.platform  // "win32", "darwin", "linux"
+```
+
+## Tools Object (for more features)
+
+```typescript
+tools.filesystem.ls("path")
+tools.filesystem.read("file")
+tools.filesystem.write("file", "content")
+tools.api.get("url")
+tools.api.post("url", { body: "..." })
+tools.discover.list()
+tools.background.spawn("command")
+tools.background.list()
+```
+
+## Return Values
+
+- Functions that return strings output directly
+- Use console.log() for multi-line output
+- Return value of last expression is returned as output
+- $() returns structured object: { stdout, stderr, exitCode, pid? }
+
+## Working Directory
+
+By default, code executes in the current terminal directory. Use the `workdir` parameter to specify a different directory:
+
+```typescript
+// Execute in a specific directory
+ls()  // with workdir="/path/to/project"
+
+// Or use absolute paths in your code
+cat("/path/to/project/package.json")
+```
+
+## Parameters
+
+- `code` (required): TypeScript code to execute
+- `description` (optional): Description of what this code does
+- `workdir` (optional): Working directory for execution (defaults to current terminal directory)
+- `timeout` (optional): Timeout in milliseconds
+- `background` (optional): Run in background, returns session_id
+
+## Examples
+
+```typescript
+// List files
+ls()
+
+// Read file
+cat("package.json")
+
+// Write file
+write("test.txt", "hello world")
+
+// Glob pattern
+glob("src/**/*.ts")
+
+// Use console for output
+console.log("Current dir:", pwd())
+
+// Execute command and check exit code
+const result = $("npm test")
+if (result.exitCode === 0) {
+  console.log("Tests passed!")
+} else {
+  console.error("Tests failed:", result.stderr)
+}
+
+// Run dev server in background
+const devServer = background.spawn("npm run dev")
+console.log("Dev server PID:", devServer.pid)
+```

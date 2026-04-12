@@ -26,7 +26,10 @@ export function createPty(opts: {
   }
 
   const shell = process.platform === "win32" ? "powershell.exe" : process.env.SHELL || "/bin/bash"
-  const args = process.platform === "win32" ? [] : ["-l", "-c", opts.command]
+  const args =
+    process.platform === "win32"
+      ? ["-Command", opts.command]
+      : ["-l", "-c", opts.command]
 
   const proc = pty.spawn(shell, args, {
     name: "xterm-256color",

@@ -27,7 +27,7 @@ function local(method: string, path: string) {
 const routes = lazy(() => InstanceRoutes())
 
 export const WorkspaceRouterMiddleware: MiddlewareHandler = async (c) => {
-  const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+  const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.env.OPENCODE_CWD || process.cwd()
   const directory = Filesystem.resolve(
     (() => {
       try {

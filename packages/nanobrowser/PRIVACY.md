@@ -1,26 +1,26 @@
-# Privacy Policy for Nanobrowser
+# Privacy Policy for HandofAI
 
 ## Introduction
 
-[Nanobrowser](https://github.com/nanobrowser/nanobrowser) is an open-source AI web automation Chrome extension. This Privacy Policy explains how we handle your data and protect your privacy.
+HandofAI is an AI-powered browser extension. This Privacy Policy explains how we handle your data and protect your privacy.
 
 ## Open Source
 
-Nanobrowser is licensed under Apache License 2.0. All source code is publicly available in our [GitHub repository](https://github.com/nanobrowser/nanobrowser), ensuring complete transparency.
+HandofAI is licensed under Apache License 2.0. All source code is publicly available, ensuring complete transparency.
 
 ## Data Collection and Processing
 
 ### Local Processing
-- Nanobrowser operates entirely within your browser
+- HandofAI operates entirely within your browser
 - Login credentials and cookies never leave your browser
 - All user data is processed locally by default
 
-### Anonymous Analytics (Optional)
-**Analytics is enabled by default but can be disabled anytime** in extension settings.
+### Optional Analytics
+Analytics is enabled by default but can be disabled anytime in extension settings.
 
 **We collect only:**
 - Task metrics (execution times, error categories)
-- Domain names visited (e.g., "amazon.com" - not full URLs)
+- Domain names visited (e.g., "example.com" - not full URLs)
 - Anonymous usage statistics
 - Anonymous user identifier (randomly generated)
 
@@ -28,8 +28,6 @@ Nanobrowser is licensed under Apache License 2.0. All source code is publicly av
 - Personal information, credentials, or authentication data
 - Full URLs, page content, screenshots, or task instructions
 - Any personally identifiable information
-
-Analytics data is processed by PostHog and used solely to improve the extension. Data is anonymized and never sold or shared with advertisers.
 
 ### LLM Provider Interactions
 When using AI features, web page data (screenshots and HTML) is sent directly to your chosen LLM provider. This is necessary for AI functionality. Your data privacy is subject to your LLM provider's policies.
@@ -41,13 +39,13 @@ When using AI features, web page data (screenshots and HTML) is sent directly to
 
 ## User Control
 - Clear conversation history and settings anytime
-- **Enable/disable analytics** through extension options
+- Enable/disable analytics through extension options
 - Uninstall extension to remove all local data
 
 ## Changes to This Privacy Policy
 We may update this policy periodically. Please review it regularly for changes.
 
 ## Contact
-Questions or concerns? Contact us at cws@felight.xyz
+Questions or concerns? Contact us through our GitHub repository.
 
-Last Updated: August 30, 2025
+Last Updated: April 2026

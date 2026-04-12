@@ -89,6 +89,7 @@
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "@types/node-cron": "3.0.11",
+    "bun-pty": "0.4.8",
     "node-cron": "3",
     "typescript": "catalog:"
   },

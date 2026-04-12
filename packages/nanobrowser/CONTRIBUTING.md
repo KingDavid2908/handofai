@@ -1,6 +1,6 @@
-# Contributing to NanoBrowser
+# Contributing to HandofAI
 
-We deeply appreciate your interest in contributing to NanoBrowser! Every contribution helps make Nanobrowser more powerful and accessible for everyone.
+We appreciate your interest in contributing to HandofAI!
 
 ## Quick Start
 

@@ -687,12 +687,24 @@ async function runPty(
 ): Promise<{ title: string; metadata: any; output: string }> {
   let output = ""
   let exitCode: number | null = null
+  let lastOutputLength = 0
+  let idleTimer: ReturnType<typeof setTimeout> | null = null
 
   pty.onData = (data: string) => {
     output += data
     ctx.metadata({ metadata: { output: preview(output), description } })
+    lastOutputLength = output.length
+    if (idleTimer) clearTimeout(idleTimer)
+    idleTimer = setTimeout(() => {
+      if (exitCode === null) {
+        exitCode = 0
+      }
+    }, 5000)
   }
-  pty.onExit = (code: number) => { exitCode = code }
+  pty.onExit = (code: number) => {
+    exitCode = code
+    if (idleTimer) clearTimeout(idleTimer)
+  }
 
   if (ctx.abort.aborted) {
     pty.kill()
@@ -703,7 +715,12 @@ async function runPty(
     }
   }
 
-  const timer = setTimeout(() => pty.kill(), timeout + 100)
+  const timer = setTimeout(() => {
+    if (exitCode === null) {
+      pty.kill()
+      exitCode = 124
+    }
+  }, timeout + 100)
 
   await new Promise<void>((resolve) => {
     const check = setInterval(() => {
@@ -713,6 +730,7 @@ async function runPty(
       pty.kill()
       clearInterval(check)
       clearTimeout(timer)
+      if (idleTimer) clearTimeout(idleTimer)
       resolve()
     }, { once: true })
   })

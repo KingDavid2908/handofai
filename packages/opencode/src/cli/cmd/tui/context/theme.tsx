@@ -42,6 +42,7 @@ import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { useTuiConfig } from "./tui-config"
+import { getWorkingDirectory } from "@/util/working-directory"
 import { isRecord } from "@/util/record"
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
 
@@ -482,7 +483,7 @@ async function getCustomThemes() {
     ...(await Array.fromAsync(
       Filesystem.up({
         targets: [".opencode"],
-        start: process.cwd(),
+        start: getWorkingDirectory(),
       }),
     )),
   ]

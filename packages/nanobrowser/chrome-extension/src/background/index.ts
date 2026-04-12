@@ -394,7 +394,7 @@ function connectToHandofai() {
   ws = new WebSocket('ws://localhost:18889')
 
   ws.onopen = () => {
-    console.log('[NanoBrowser] Connected to handofai')
+    console.log('[HandofAI] Connected to handofai')
     ws!.send(JSON.stringify({ type: 'ready', extensionId: chrome.runtime.id }))
   }
 
@@ -404,15 +404,15 @@ function connectToHandofai() {
 
       // Handle provider config from handofai
       if (message.type === 'provider_config') {
-        console.log('[NanoBrowser] Received provider_config:', JSON.stringify(message.config, null, 2))
+        console.log('[HandofAI] Received provider_config:', JSON.stringify(message.config, null, 2))
         await chrome.storage.local.set({
           'llm-api-keys': { providers: message.config.providers },
           'agent-models': { agents: message.config.agents },
         })
-        console.log('[NanoBrowser] Provider config saved to storage')
+        console.log('[HandofAI] Provider config saved to storage')
         // Verify it was saved
         const stored = await chrome.storage.local.get(['llm-api-keys', 'agent-models'])
-        console.log('[NanoBrowser] Verified stored config:', JSON.stringify(stored, null, 2))
+        console.log('[HandofAI] Verified stored config:', JSON.stringify(stored, null, 2))
         return
       }
 
@@ -429,17 +429,17 @@ function connectToHandofai() {
         resolveLlmCallError(message.id, message.error)
       }
     } catch (err) {
-      console.error('[NanoBrowser] Error handling message:', err)
+      console.error('[HandofAI] Error handling message:', err)
     }
   }
 
   ws.onclose = () => {
-    console.log('[NanoBrowser] Disconnected, reconnecting in 3s...')
+    console.log('[HandofAI] Disconnected, reconnecting in 3s...')
     wsReconnectTimer = setTimeout(connectToHandofai, 3000)
   }
 
   ws.onerror = (err) => {
-    console.error('[NanoBrowser] WebSocket error:', err)
+    console.error('[HandofAI] WebSocket error:', err)
   }
 }
 
@@ -477,7 +477,7 @@ function resolveLlmCallError(id: string, error: string) {
 async function handleExecuteTask(message: any) {
   try {
     const providers = await llmProviderStore.getAllProviders()
-    console.log('[NanoBrowser] handleExecuteTask - providers:', JSON.stringify(providers, null, 2))
+    console.log('[HandofAI] handleExecuteTask - providers:', JSON.stringify(providers, null, 2))
     
     if (Object.keys(providers).length === 0) {
       return {
@@ -487,7 +487,7 @@ async function handleExecuteTask(message: any) {
     }
 
     const agentModels = await agentModelStore.getAllAgentModels()
-    console.log('[NanoBrowser] handleExecuteTask - agent models:', JSON.stringify(agentModels, null, 2))
+    console.log('[HandofAI] handleExecuteTask - agent models:', JSON.stringify(agentModels, null, 2))
 
     const executor = await setupExecutor(message.id, message.task, browserContext, {
       proxiedLlm: false,

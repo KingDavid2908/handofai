@@ -16,13 +16,14 @@ import { Locale } from "@/util/locale"
 import { Global } from "@/global"
 import { useDialog } from "../../ui/dialog"
 import { useTuiConfig } from "../../context/tui-config"
+import { getWorkingDirectory } from "@/util/working-directory"
 
 type PermissionStage = "permission" | "always" | "reject"
 
 function normalizePath(input?: string) {
   if (!input) return ""
 
-  const cwd = process.cwd()
+  const cwd = getWorkingDirectory()
   const home = Global.Path.home
   const absolute = path.isAbsolute(input) ? input : path.resolve(cwd, input)
   const relative = path.relative(cwd, absolute)

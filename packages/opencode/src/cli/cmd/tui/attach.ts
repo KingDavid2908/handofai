@@ -5,6 +5,7 @@ import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
 import { existsSync } from "fs"
+import { getWorkingDirectory } from "@/util/working-directory"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -67,7 +68,7 @@ export const AttachCommand = cmd({
         return { Authorization: auth }
       })()
       const config = await Instance.provide({
-        directory: directory && existsSync(directory) ? directory : process.cwd(),
+        directory: directory && existsSync(directory) ? directory : getWorkingDirectory(),
         fn: () => TuiConfig.get(),
       })
       await tui({

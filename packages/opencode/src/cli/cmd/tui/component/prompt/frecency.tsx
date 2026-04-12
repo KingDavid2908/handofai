@@ -1,6 +1,7 @@
 import path from "path"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
+import { getWorkingDirectory } from "@/util/working-directory"
 import { onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "../../context/helper"
@@ -63,7 +64,7 @@ export const { use: useFrecency, provider: FrecencyProvider } = createSimpleCont
     })
 
     function updateFrecency(filePath: string) {
-      const absolutePath = path.resolve(process.cwd(), filePath)
+      const absolutePath = path.resolve(getWorkingDirectory(), filePath)
       const newEntry = {
         frequency: (store.data[absolutePath]?.frequency || 0) + 1,
         lastOpen: Date.now(),
@@ -82,7 +83,7 @@ export const { use: useFrecency, provider: FrecencyProvider } = createSimpleCont
     }
 
     return {
-      getFrecency: (filePath: string) => calculateFrecency(store.data[path.resolve(process.cwd(), filePath)]),
+      getFrecency: (filePath: string) => calculateFrecency(store.data[path.resolve(getWorkingDirectory(), filePath)]),
       updateFrecency,
       data: () => store.data,
     }

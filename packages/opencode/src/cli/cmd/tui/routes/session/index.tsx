@@ -81,6 +81,7 @@ import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
 import { DialogMemory } from "../../component/dialog-memory"
+import { getWorkingDirectory } from "@/util/working-directory"
 
 addDefaultParsers(parsers.parsers)
 
@@ -895,7 +896,7 @@ export function Session() {
             // Just open in editor without saving
             await Editor.open({ value: transcript, renderer })
           } else {
-            const exportDir = process.cwd()
+            const exportDir = getWorkingDirectory()
             const filename = options.filename.trim()
             const filepath = path.join(exportDir, filename)
 
@@ -2235,7 +2236,7 @@ function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]
 function normalizePath(input?: string) {
   if (!input) return ""
 
-  const cwd = process.cwd()
+  const cwd = getWorkingDirectory()
   const absolute = path.isAbsolute(input) ? input : path.resolve(cwd, input)
   const relative = path.relative(cwd, absolute)
 
