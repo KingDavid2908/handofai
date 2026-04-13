@@ -11,6 +11,7 @@ import { Filesystem } from "../../util/filesystem"
 import { Process } from "../../util/process"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
+import { SyncEvent } from "../../sync"
 
 type Spin = {
   start: (msg: string) => void
@@ -169,6 +170,10 @@ export function createPlugTask(input: PlugInput, dep: PlugDeps = defaultPlugDeps
 
     dep.log.success(`Installed ${mod}`)
     dep.log.info(global ? `Scope: global (${out.dir})` : `Scope: local (${out.dir})`)
+
+    const source = mod.startsWith("file:") ? "local" : "npm"
+    SyncEvent.run(SyncEvent.ToolEvent.PluginInstalled, { name: mod, source })
+
     return true
   }
 }

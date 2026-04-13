@@ -55,6 +55,7 @@ export namespace BunProc {
     using _ = await Lock.write("bun-install")
 
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
+    const modPkgJson = path.join(mod, "package.json")
     const pkgjsonPath = path.join(Global.Path.cache, "package.json")
     const parsed = await Filesystem.readJson<{ dependencies: Record<string, string> }>(pkgjsonPath).catch(async () => {
       const result = { dependencies: {} as Record<string, string> }
@@ -63,7 +64,8 @@ export namespace BunProc {
     })
     if (!parsed.dependencies) parsed.dependencies = {} as Record<string, string>
     const dependencies = parsed.dependencies
-    const modExists = await Filesystem.exists(mod)
+    // Check for package.json instead of just directory to handle partial installs
+    const modExists = await Filesystem.exists(modPkgJson)
     const cachedVersion = dependencies[pkg]
 
     if (!modExists || !cachedVersion) {

@@ -26,7 +26,7 @@ const scriptPath = fs.realpathSync(__filename)
 const scriptDir = path.dirname(scriptPath)
 
 //
-const cached = path.join(scriptDir, ".opencode")
+const cached = path.join(scriptDir, "handofaicli.exe")
 if (fs.existsSync(cached)) {
   run(cached)
 }
@@ -51,7 +51,7 @@ if (!arch) {
   arch = os.arch()
 }
 const base = "opencode-" + platform + "-" + arch
-const binary = platform === "windows" ? "opencode.exe" : "opencode"
+const binary = "handofaicli.exe"
 
 function supportsAvx2() {
   if (arch !== "x64") return false

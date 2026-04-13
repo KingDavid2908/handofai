@@ -260,4 +260,64 @@ export namespace SyncEvent {
         ref: "SyncEvent",
       })
   }
+
+  export namespace ToolEvent {
+    export const SkillInstalled = define({
+      type: "tool.skill.installed",
+      version: 1,
+      aggregate: "name",
+      schema: z.object({
+        name: z.string(),
+        location: z.string(),
+        source: z.string().optional(),
+      }),
+    })
+
+    export const SkillRemoved = define({
+      type: "tool.skill.removed",
+      version: 1,
+      aggregate: "name",
+      schema: z.object({
+        name: z.string(),
+      }),
+    })
+
+    export const ConnectorAdded = define({
+      type: "tool.connector.added",
+      version: 1,
+      aggregate: "name",
+      schema: z.object({
+        name: z.string(),
+        baseUrl: z.string(),
+      }),
+    })
+
+    export const ConnectorRemoved = define({
+      type: "tool.connector.removed",
+      version: 1,
+      aggregate: "name",
+      schema: z.object({
+        name: z.string(),
+      }),
+    })
+
+    export const PluginInstalled = define({
+      type: "tool.plugin.installed",
+      version: 1,
+      aggregate: "name",
+      schema: z.object({
+        name: z.string(),
+        source: z.enum(["npm", "local"]),
+      }),
+    })
+
+    export const PluginRemoved = define({
+      type: "tool.plugin.removed",
+      version: 1,
+      aggregate: "name",
+      schema: z.object({
+        name: z.string(),
+      }),
+    })
+  }
 }

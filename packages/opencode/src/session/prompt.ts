@@ -8,6 +8,7 @@ import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
 import { SessionRevert } from "./revert"
 import { Session } from "."
+import { SessionTools } from "../tool/typescript/discovery/session"
 import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
@@ -252,6 +253,8 @@ export namespace SessionPrompt {
       abort: controller,
       callbacks: [],
     }
+    // Initialize SessionTools for this session
+    Session.getSessionTools(sessionID)
     return controller.signal
   }
 
@@ -272,6 +275,8 @@ export namespace SessionPrompt {
     }
     match.abort.abort()
     delete s[sessionID]
+    // Clear SessionTools for this session
+    Session.clearSessionTools(sessionID)
     await SessionStatus.set(sessionID, { type: "idle" })
     return
   }
@@ -870,9 +875,12 @@ export namespace SessionPrompt {
     processor: SessionProcessor.Info
     bypassAgentCheck: boolean
     messages: MessageV2.WithParts[]
-  }) {
+    }) {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
+
+    // Get session tools to check custom tool discovery status
+    const sessionTools = Session.getSessionTools(input.session.id)
 
     const context = (args: any, options: ToolExecutionOptions): Tool.Context => ({
       sessionID: input.session.id,
@@ -909,10 +917,37 @@ export namespace SessionPrompt {
       },
     })
 
-    for (const item of await ToolRegistry.tools(
+    // Get all tools from registry and register custom ones with session for discovery
+    const allTools = await ToolRegistry.tools(
       { modelID: ModelID.make(input.model.api.id), providerID: input.model.providerID },
       input.agent,
-    )) {
+    )
+    
+    // Register custom tools (from ~/.config/handofai/tool/) with session for discovery
+    for (const item of allTools) {
+      // Check if this is a custom tool from the tool/ directory (not a built-in)
+      const isBuiltin = [
+        "bash", "browser", "websearch", "webfetch", "read", "write", "edit", "grep", "glob", "task",
+        "memory", "vision", "skill", "todo", "codesearch", "session_search", "lesson", "skills_list",
+        "skill_manage", "moa", "cronjob", "apply_patch", "question", "process", "shell", "filesystem",
+        "list", "multiedit", "webfetch", "plan_enter", "plan_exit", "discover", "plugin", "typescript",
+        "batch", "connector", "lsp", "truncate", "skills_list", "skill_manage"
+      ].includes(item.id)
+      
+      if (!isBuiltin && !sessionTools.hasTool(item.id)) {
+        sessionTools.registerCustomTool(item.id, "plugin")
+      }
+    }
+    
+    // Re-check undiscovered tools after registration
+    const undiscoveredCustomTools = sessionTools.getUndiscoveredCustomTools()
+
+    for (const item of allTools) {
+      // Skip custom tools that haven't been discovered in this session
+      if (undiscoveredCustomTools.includes(item.id)) {
+        continue
+      }
+
       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
         id: item.id as any,

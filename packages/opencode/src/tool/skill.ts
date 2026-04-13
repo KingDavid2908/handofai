@@ -5,6 +5,12 @@ import { Tool } from "./tool"
 import { Skill } from "../skill"
 import { Ripgrep } from "../file/ripgrep"
 import { iife } from "@/util/iife"
+import { Config } from "../config/config"
+
+const DEFAULT_REGISTRIES = [
+  "https://github.com/VoltAgent/awesome-agent-skills",
+  "https://github.com/vercel-labs/skills",
+]
 
 export const SkillTool = Tool.define("skill", async (ctx) => {
   const list = await Skill.available(ctx?.agent)
@@ -34,24 +40,44 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
   const hint = examples.length > 0 ? ` (e.g., ${examples}, ...)` : ""
 
   const parameters = z.object({
-    name: z.string().describe(`The name of the skill from available_skills${hint}`),
+    name: z.string().describe(`The name of the skill to load${hint}`),
   })
 
   return {
     description,
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
-      const skill = await Skill.get(params.name)
+      const { name } = params
+      let skill = await Skill.get(name)
 
       if (!skill) {
-        const available = await Skill.all().then((x) => x.map((skill) => skill.name).join(", "))
-        throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
+        const cfg = await Config.get()
+        const urls = cfg.skills?.urls?.length ? cfg.skills.urls : DEFAULT_REGISTRIES
+
+        for (const url of urls) {
+          const fetched = await fetchRemoteSkill(url, name)
+          if (fetched) {
+            skill = await Skill.get(name)
+            if (skill) break
+          }
+        }
+      }
+
+      if (!skill) {
+        const skillName = name
+        const msg = `Skill "${skillName}" not found locally or in remote registries (VoltAgent, Vercel).`
+        const hint = `To create this skill, use skill_manage({ action: "create", name: "${skillName}", content: "..." })`
+        return {
+          title: `Skill: ${skillName}`,
+          output: `<skill_content name="${skillName}">\n${msg}\n\n${hint}\n</skill_content>`,
+          metadata: { name: skillName },
+        }
       }
 
       await ctx.ask({
         permission: "skill",
-        patterns: [params.name],
-        always: [params.name],
+        patterns: [name],
+        always: [name],
         metadata: {},
       })
 
@@ -86,20 +112,43 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           "",
           skill.content.trim(),
           "",
-          `Base directory for this skill: ${base}`,
-          "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
-          "Note: file list is sampled.",
+          `Base directory: ${base}`,
           "",
           "<skill_files>",
           files,
           "</skill_files>",
           "</skill_content>",
         ].join("\n"),
-        metadata: {
-          name: skill.name,
-          dir,
-        },
+        metadata: { name: skill.name },
       }
     },
   }
 })
+
+async function fetchRemoteSkill(
+  registryUrl: string,
+  skillName: string
+): Promise<boolean> {
+  const url = `${registryUrl.replace(/\/$/, "")}/skills/${skillName}/SKILL.md`
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return false
+
+    const text = await res.text()
+    if (!text.startsWith("---")) return false
+
+    const homeDir = process.env.HOME || ""
+    const cacheDir = path.join(homeDir, ".cache/opencode/skills/remote", skillName)
+    const fs = await import("fs/promises")
+
+    try {
+      await fs.mkdir(cacheDir, { recursive: true })
+      await fs.writeFile(path.join(cacheDir, "SKILL.md"), text)
+      return true
+    } catch {
+      return false
+    }
+  } catch {
+    return false
+  }
+}

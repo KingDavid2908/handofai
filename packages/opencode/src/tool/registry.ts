@@ -18,6 +18,7 @@ import { LessonTool } from "./lesson"
 import { SkillManageTool } from "./skill-manage"
 import { SkillsListTool } from "./skills-list"
 import { ProcessTool } from "./process"
+import { DiscoverTool } from "./discover"
 import { MixtureOfAgentsTool } from "./mixture-of-agents"
 import { VisionTool } from "./vision"
 import { CronjobTool } from "./cronjob"
@@ -38,6 +39,7 @@ import { LspTool } from "./lsp"
 import { Truncate } from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
 import { TypeScriptTool } from "./typescript"
+import { PluginTool } from "./plugin"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
@@ -153,6 +155,8 @@ export namespace ToolRegistry {
           BrowserTool,
           TypeScriptTool,
           ApplyPatchTool,
+          DiscoverTool,
+          PluginTool,
           ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
           ...(cfg.experimental?.batch_tool === true ? [BatchTool] : []),
           ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
@@ -188,7 +192,10 @@ export namespace ToolRegistry {
           }
 
           const usePatch =
-            model.modelID.includes("gpt-") && !model.modelID.includes("oss") && !model.modelID.includes("gpt-4")
+            typeof model.modelID === "string" &&
+            model.modelID.includes("gpt-") &&
+            !model.modelID.includes("oss") &&
+            !model.modelID.includes("gpt-4")
           if (tool.id === "apply_patch") return usePatch
           if (tool.id === "edit" || tool.id === "write") return !usePatch
 

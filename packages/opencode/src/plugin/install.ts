@@ -11,6 +11,7 @@ import { ConfigPaths } from "@/config/paths"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@/util/flock"
+import { SyncEvent } from "@/sync"
 
 import { parsePluginSpecifier, readPluginPackage, resolvePluginTarget } from "./shared"
 

@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import { scanSkill, shouldAllowInstall, formatScanReport } from "@/tool/skills-guard"
 import type { ScanResult } from "@/tool/skills-guard"
 import { Global } from "@/global"
+import { SyncEvent } from "@/sync"
 
 const SKILLS_DIR = path.join(Global.Path.config, "skills")
 const ALLOWED_SUBDIRS = ["references", "templates", "scripts", "assets"]
@@ -163,6 +164,12 @@ export async function create(name: string, content: string, category?: string): 
     return { success: false, error: `Security blocked: ${reason}`, scanReport: formatScanReport(scan) }
   }
 
+  SyncEvent.run(SyncEvent.ToolEvent.SkillInstalled, {
+    name,
+    location: skillDir,
+    source: category,
+  })
+
   return {
     success: true,
     message: `Skill '${name}' created.`,
@@ -252,6 +259,8 @@ export async function remove(name: string): Promise<ManageResult> {
   if (!existing) return { success: false, error: `Skill '${name}' not found.` }
 
   await fs.rm(existing, { recursive: true, force: true })
+
+  SyncEvent.run(SyncEvent.ToolEvent.SkillRemoved, { name })
 
   const parent = path.dirname(existing)
   if (parent !== SKILLS_DIR) {

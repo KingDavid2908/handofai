@@ -35,6 +35,7 @@ import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { Effect, Layer, Scope, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
+import { SessionTools, createSessionTools } from "@/tool/typescript/discovery/session"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -881,4 +882,51 @@ export namespace Session {
     z.object({ sessionID: SessionID.zod, modelID: ModelID.zod, providerID: ProviderID.zod, messageID: MessageID.zod }),
     (input) => runPromise((svc) => svc.initialize(input)),
   )
+
+  // Session-scoped tool tracking
+  const sessionToolsRegistry = new Map<string, SessionTools>()
+
+  /**
+   * Get or create SessionTools for a session
+   * Called on session start to initialize tool tracking
+   */
+  export function getSessionTools(sessionId: string): SessionTools {
+    let tools = sessionToolsRegistry.get(sessionId)
+    if (!tools) {
+      tools = createSessionTools(sessionId)
+      tools.loadFromEvents()
+      sessionToolsRegistry.set(sessionId, tools)
+      log.debug("SessionTools initialized", { sessionId, toolCount: tools.getToolCount() })
+    }
+    return tools
+  }
+
+  /**
+   * Clear SessionTools for a session
+   * Called on session end to cleanup
+   */
+  export function clearSessionTools(sessionId: string): void {
+    const tools = sessionToolsRegistry.get(sessionId)
+    if (tools) {
+      tools.clear()
+      sessionToolsRegistry.delete(sessionId)
+      log.debug("SessionTools cleared", { sessionId })
+    }
+  }
+
+  /**
+   * Check if SessionTools exists for a session
+   */
+  export function hasSessionTools(sessionId: string): boolean {
+    return sessionToolsRegistry.has(sessionId)
+  }
+
+  /**
+   * Register a custom tool that will require discovery
+   * Called when plugins/skills register tools
+   */
+  export function registerCustomTool(sessionId: string, toolName: string, source?: "skill" | "connector" | "plugin" | "builtin"): void {
+    const tools = getSessionTools(sessionId)
+    tools.registerCustomTool(toolName, source ?? "plugin")
+  }
 }

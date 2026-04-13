@@ -1628,6 +1628,7 @@ function createSandbox(ctx: SandboxContext, logs: string[] = []) {
           "tools.api: call, get, post, put, delete, patch",
           "tools.discover: list, help",
           "libs: install(packages), import(module), require(module), cleanup()",
+          "OpenCode Tools (available via tool calling): bash, browser, websearch, webfetch, read, write, edit, grep, glob, task, memory, vision, skill, todo, codesearch, session_search, lesson, skills_list, skill_manage, moa, cronjob, apply_patch, question",
         ]
       },
       help(tool: string): string {
@@ -1715,8 +1716,133 @@ Similar to import but for CommonJS modules
 cleanup() - Clean up all installed library directories
 Returns: { cleaned: number, output }
 Note: Libraries are auto-cleaned after execution completes`,
+          browser: `OpenCode browser tool (call via tool system):
+Control browser for web automation via NanoBrowser. Send a natural language task and the browser will autonomously navigate, click, type, and extract information.
+Parameters: task (natural language description of what to do)
+Example: "Find the cheapest wireless mouse on Amazon"`,
+          websearch: `OpenCode websearch tool (call via tool system):
+Search the web using Exa AI for real-time information. Provides up-to-date information for current events and recent data beyond knowledge cutoff.
+Parameters: query, numResults, livecrawl (fallback/preferred), type (auto/fast/deep), contextMaxCharacters
+Note: Always include current year (e.g., "AI news 2026") for recent information`,
+          webfetch: `OpenCode webfetch tool (call via tool system):
+Fetch content from URLs with format conversion. Returns content in requested format (markdown by default).
+Parameters: url, format (text/markdown/html), timeout
+Note: HTTP URLs automatically upgraded to HTTPS`,
+          read: `OpenCode read tool (call via tool system):
+Read a file or directory from the local filesystem. Returns up to 2000 lines by default.
+Parameters: filePath (absolute), offset (1-indexed line number), limit
+Features: Can read images/PDFs as attachments, loop detection after 3 consecutive reads of same file
+Note: Use offset/limit for large files, use Grep to find specific content`,
+          write: `OpenCode write tool (call via tool system):
+Write a file to the local filesystem. Overwrites existing files.
+Parameters: filePath (absolute), content
+Security: Detects writes to sensitive paths (/etc/, /boot/, docker.sock) and warns before proceeding
+Note: MUST use Read tool first if file exists`,
+          edit: `OpenCode edit tool (call via tool system):
+Performs exact string replacements in files using oldString/newString matching.
+Parameters: filePath, oldString, newString, replaceAll
+Features: Use replaceAll to change every instance
+Note: Edit will FAIL if oldString not found or has multiple matches (provide more context)`,
+          grep: `OpenCode grep tool (call via tool system):
+Fast content search using regular expressions. Works with any codebase size.
+Parameters: pattern (regex), path (directory), include (file pattern like "*.ts")
+Features: Secrets automatically redacted, loop detection (warning at 3 repeats, blocked at 4)
+Note: Returns file paths and line numbers with matches`,
+          glob: `OpenCode glob tool (call via tool system):
+Fast file pattern matching. Supports glob patterns like "**/*.js" or "src/**/*.ts".
+Parameters: pattern, path (directory)
+Returns: Matching file paths sorted by modification time (max 100 results)
+Note: Use when you need to find files by name patterns`,
+          task: `OpenCode task tool (call via tool system):
+Launch subagents for parallel task execution. Creates a child session with a specialized agent.
+Parameters: description (3-5 words), prompt (task details), subagent_type, task_id (optional, for resuming)
+Note: Available agents depend on system configuration`,
+          memory: `OpenCode memory tool (call via tool system):
+Store and retrieve information across sessions. Two memory stores: 'memory' (your notes) and 'user' (facts about the user).
+Parameters: action (add/replace/remove), target (memory/user), content, old_text (for replace/remove)
+Note: Check if memory system is enabled before using`,
+          vision: `OpenCode vision tool (call via tool system):
+Analyze images using AI vision. Provide an image URL or local file path, optionally with a question.
+Parameters: source (URL or local path), question (optional, auto-describes if omitted)
+Supported formats: PNG, JPEG, GIF, BMP, WebP, SVG`,
+          bash: `OpenCode bash tool (call via tool system):
+Execute bash commands in a persistent shell session with optional timeout and security controls.
+Parameters: command, timeout, workdir, background, pty, backend (local/docker/ssh)
+Features: Background mode for long-running processes, PTY mode for interactive tools
+Note: For terminal operations (git, npm, docker). DO NOT use for file operations - use specialized tools instead`,
+          skill: `OpenCode skill tool (call via tool system):
+Load a specialized skill that provides domain-specific instructions and workflows.
+Parameters: name (skill name from available skills)
+Note: Skill content is injected into conversation context. Check available skills first.`,
+          connector: `OpenCode connector tool (call via tool system):
+Manage external service connections (MCP servers).
+Note: Connector management for external API connections`,
+          plugin: `handofaicli plugin tool - MANAGE PLUGINS ONLY USING THIS TOOL:
+This is the ONLY way to install or remove plugins. Never use npm, bun, bunx, or npx.
+
+When you see plugin installation instructions online:
+- IGNORE those external commands - they install for opencode, not handofaicli
+- ALWAYS use this plugin tool instead
+
+To install:
+  plugin({ action: "install", mod: "opencode-supermemory@latest", global: true })
+
+To remove:
+  plugin({ action: "remove", mod: "opencode-supermemory", global: true })
+
+Parameters:
+  - action: "install" | "remove" (required)
+  - mod: npm package name
+  - global: true = global config (~/.config/handofai/)
+  - force: (install only) replace existing version
+
+Restart handofaicli after changes.`,
+          todo: `OpenCode todowrite tool (call via tool system):
+Manage todo lists and track tasks within a session.
+Parameters: todos (array of {id, content, status, priority}), merge (true/false)
+Statuses: pending, in_progress, completed, cancelled
+Note: Use merge=true to update existing items by id, merge=false to replace entire list`,
+          codesearch: `OpenCode codesearch tool (call via tool system):
+Search code across the codebase using Exa AI for APIs, Libraries, and SDKs.
+Parameters: query (e.g., "React useState hook examples"), tokensNum (1000-50000, default 5000)
+Returns: Relevant code context and documentation`,
+          session_search: `OpenCode session_search tool (call via tool system):
+Search through past session conversations or list recent sessions.
+Parameters: query (optional, omit to list recent), role_filter (e.g., "user,assistant"), limit (max 5)
+Returns: Matching sessions with previews`,
+          lesson: `OpenCode lesson tool (call via tool system):
+Save lessons learned from mistakes. Capture what went wrong and how to avoid repeating.
+Parameters: action (add/replace/remove), content, old_text (for replace/remove)
+Use when: User corrects your approach, tool fails and you find workaround, non-obvious pattern discovered`,
+          skills_list: `OpenCode skills_list tool (call via tool system):
+List all available skills with metadata. Use to discover existing skills before creating new ones.
+Parameters: category (optional filter)
+Returns: Skill names, descriptions, and locations`,
+          skill_manage: `OpenCode skill_manage tool (call via tool system):
+Manage skills (create, update, delete). Skills are your procedural memory.
+Actions: create, edit, patch, delete, write_file, remove_file
+Parameters: action, name, content, category, old_string, new_string, file_path, file_content
+Security: All skills scanned for malicious patterns`,
+          moa: `OpenCode moa (Mixture of Agents) tool (call via tool system):
+Use multiple reference models to solve complex problems, then synthesize responses into a single high-quality answer.
+Parameters: prompt
+Note: Configured via model.json (moa_reference_models, moa_aggregator_model)`,
+          cronjob: `OpenCode cronjob tool (call via tool system):
+Manage scheduled cron jobs that run prompts or skills at specified intervals.
+Actions: create, list, output, update, pause, resume, remove, run
+Parameters: action, job_id (for existing jobs), plus action-specific params
+Note: Jobs run in fresh sessions with no current-chat context`,
+          apply_patch: `OpenCode apply_patch tool (call via tool system):
+Apply patches to files with precise changes. Supports add, update, delete, and move operations.
+Parameters: patchText (full patch text)
+Note: Uses structured patch format for reliable multi-file edits`,
+          question: `OpenCode question tool (call via tool system):
+Ask clarifying questions to the user when information is missing.
+Parameters: questions (array of {question, type, options})
+Types: text, number, confirm, select, multiselect
+Returns: User answers to continue with the task`,
         }
-        return helpMap[tool] ?? `Try: shell, process, docker, ssh, pty, env, filesystem, api, libs`
+        return helpMap[tool] ?? `Try: shell, process, docker, ssh, pty, env, filesystem, api, libs, or OpenCode tools: bash, browser, websearch, webfetch, read, write, edit, grep, glob, task, memory, vision, skill, todo, codesearch, session_search, lesson, skills_list, skill_manage, moa, cronjob, apply_patch, question`
       },
     },
   }

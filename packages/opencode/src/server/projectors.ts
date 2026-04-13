@@ -1,5 +1,6 @@
 import z from "zod"
 import sessionProjectors from "../session/projectors"
+import toolProjectors from "../sync/tool-projectors"
 import { SyncEvent } from "@/sync"
 import { Session } from "@/session"
 import { SessionTable } from "@/session/session.sql"
@@ -7,7 +8,7 @@ import { Database, eq } from "@/storage/db"
 
 export function initProjectors() {
   SyncEvent.init({
-    projectors: sessionProjectors,
+    projectors: [...sessionProjectors, ...toolProjectors],
     convertEvent: (type, data) => {
       if (type === "session.updated") {
         const id = (data as z.infer<typeof Session.Event.Updated.schema>).sessionID
