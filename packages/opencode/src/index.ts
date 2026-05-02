@@ -9,6 +9,7 @@ import { AgentCommand } from "./cli/cmd/agent"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
 import { UninstallCommand } from "./cli/cmd/uninstall"
 import { ModelsCommand } from "./cli/cmd/models"
+import { HandOfAIModelsCommand } from "./cli/cmd/handofai-models"
 import { UI } from "./cli/ui"
 import { Installation } from "./installation"
 import { NamedError } from "@opencode-ai/util/error"
@@ -151,6 +152,7 @@ const cli = yargs(hideBin(process.argv))
   .command(ServeCommand)
   .command(WebCommand)
   .command(ModelsCommand)
+  .command(HandOfAIModelsCommand)
   .command(VisionCommand)
   .command(CronCommand)
   .command(BrowserCommand)
