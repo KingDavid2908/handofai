@@ -1,0 +1,50 @@
+# HandofAI protected files — always keep our version during upstream merges
+# These files contain branding, CLI name, and customizations that must never be overwritten
+
+# CLI binary name and entrypoint
+packages/opencode/bin/handofaicli.cjs merge=ours
+
+# Package metadata (contains "handofaicli" bin name)
+packages/opencode/package.json merge=ours
+
+# Logo and branding strings
+packages/opencode/src/cli/logo.ts merge=ours
+packages/opencode/src/cli/cmd/tui/component/logo.tsx merge=ours
+packages/opencode/src/cli/ui.ts merge=ours
+packages/app/src/i18n/en.ts merge=ours
+
+# App favicon and branding assets
+packages/app/public/apple-touch-icon*.png merge=ours
+packages/app/public/favicon*.png merge=ours
+packages/app/public/favicon*.ico merge=ours
+packages/app/public/favicon*.svg merge=ours
+packages/app/public/site.webmanifest merge=ours
+packages/app/public/social-share*.png merge=ours
+packages/app/public/web-app-manifest-*.png merge=ours
+
+# Web favicon and branding assets
+packages/web/public/apple-touch-icon*.png merge=ours
+packages/web/public/favicon*.png merge=ours
+packages/web/public/favicon*.ico merge=ours
+packages/web/public/favicon*.svg merge=ours
+packages/web/public/site.webmanifest merge=ours
+packages/web/public/social-share*.png merge=ours
+packages/web/public/web-app-manifest-*.png merge=ours
+
+# Console favicon and branding assets
+packages/console/app/public/apple-touch-icon*.png merge=ours
+packages/console/app/public/favicon*.png merge=ours
+packages/console/app/public/favicon*.ico merge=ours
+packages/console/app/public/favicon*.svg merge=ours
+packages/console/app/public/site.webmanifest merge=ours
+packages/console/app/public/social-share*.png merge=ours
+packages/console/app/public/web-app-manifest-*.png merge=ours
+
+# Enterprise favicon and branding assets
+packages/enterprise/public/apple-touch-icon*.png merge=ours
+packages/enterprise/public/favicon*.png merge=ours
+packages/enterprise/public/favicon*.ico merge=ours
+packages/enterprise/public/favicon*.svg merge=ours
+packages/enterprise/public/site.webmanifest merge=ours
+packages/enterprise/public/social-share*.png merge=ours
+packages/enterprise/public/web-app-manifest-*.png merge=ours
