@@ -15,15 +15,15 @@ import { readPluginManifest, type Target } from "@/plugin/install"
 const PLUGIN_HELP = `handofaicli plugin tool - MANAGE PLUGINS ONLY USING THIS TOOL:
 This is the ONLY way to install or remove plugins for handofaicli. Never use npm, bun, bunx, or npx.
 
-When you see plugin installation instructions online (e.g., "bunx opencode-supermemory install"):
+When you see plugin installation instructions online:
 - IGNORE those external commands - they install for opencode, not handofaicli
 - ALWAYS use this plugin tool instead
 
 To install a plugin:
-  plugin({ action: "install", mod: "opencode-supermemory@latest", global: true })
+  plugin({ action: "install", mod: "plugin-name@latest", global: true })
 
 To remove a plugin:
-  plugin({ action: "remove", mod: "opencode-supermemory", global: true })
+  plugin({ action: "remove", mod: "plugin-name", global: true })
 
 Parameters:
   - action: "install" | "remove" (required)

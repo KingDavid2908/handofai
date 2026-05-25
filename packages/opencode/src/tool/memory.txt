@@ -1,4 +1,4 @@
-Manage persistent memory across sessions. Use this tool to save, update, or remove important information that should persist between conversations.
+Manage persistent memory across sessions. Use this tool to save, update, remove, search, or list important information that should persist between conversations.
 
 Two memory targets:
 - "memory": Your personal notes about the project, tasks, technical decisions, and progress.
@@ -8,5 +8,34 @@ Actions:
 - "add": Add a new entry. Will reject duplicates and entries that exceed the character limit.
 - "replace": Find an entry containing old_text and replace it with content. Errors if multiple entries match.
 - "remove": Find an entry containing old_text and remove it. Errors if multiple entries match.
+- "search": Search across all configured memory backends using a query string.
+- "list": List recent memories from all configured backends.
+- "status": Show status of all memory backends (local, supermemory, graphlit).
+
+Content types:
+- "text": Plain text facts and notes (default). Content should be the actual text.
+- "image": Image files or data URIs. Content MUST be the file path (e.g., "C:\path\to\image.png") or data URI. Do NOT save text descriptions as images — if saving an image, pass the actual file path.
+- "video": Video files or URLs. Content MUST be the file path or URL to the video file. Do NOT save text descriptions as videos.
+- "audio": Audio files or transcripts. Content MUST be the file path or data URI to the audio file. Do NOT save text descriptions as audio.
+- "document": PDF, docx, and other document files. Content MUST be the file path to the document. Do NOT save text descriptions as documents.
+
+CRITICAL: When saving media (image, video, audio, document), the "content" parameter must be the actual file path or data URI, NOT a text description of the file. If you have both a file and a description, save the file as media and the description as separate text entries.
+
+Categories (controls which backend receives the entry):
+- "user_preferences": User's personal preferences, habits, or choices (e.g., "I prefer TypeScript")
+- "project_knowledge": Facts about the project, tech stack, architecture (e.g., "Project uses Bun")
+- "code_patterns": Coding conventions, patterns, or style preferences (e.g., "Use async/await")
+- "errors": Errors, bugs, failures, or fixes discussed (e.g., "Fixed null reference error")
+- "conversations": Full conversation context (synced on memory review trigger)
+- "images": Image content (routed to Graphlit by default)
+- "videos": Video content (routed to Graphlit by default)
+- "audio": Audio content (routed to Graphlit by default)
+- "documents": Document files (routed to Graphlit by default)
+
+Backend routing:
+- "backend": "auto" uses the configured routing rules per backend (default)
+- "backend": "local" | "supermemory" | "graphlit" forces a specific backend
+- Default routing: Local handles text facts, Supermemory handles text + conversations, Graphlit handles media
+- User can customize routing via /memory → Backend Routing
 
 Keep entries concise and focused. Use this to remember important context that would be useful in future sessions.

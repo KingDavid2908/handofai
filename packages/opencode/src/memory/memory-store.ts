@@ -3,6 +3,7 @@ import { mkdir } from "fs/promises"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { Config } from "@/config/config"
+import { MemoryRouter } from "./router"
 
 const MEMORY_DIR = path.join(Global.Path.config, "memories")
 const MEMORY_FILE = path.join(MEMORY_DIR, "MEMORY.md")
@@ -64,6 +65,18 @@ export namespace MemoryStore {
 
   let snapshot: Snapshot | null = null
   let live: LiveState | null = null
+  let router: MemoryRouter | null = null
+
+  /**
+   * Get or create the shared MemoryRouter instance.
+   */
+  export async function getRouter(): Promise<MemoryRouter> {
+    if (!router) {
+      router = new MemoryRouter()
+      await router.init()
+    }
+    return router
+  }
 
   /**
    * Check if the memory system is enabled in config.
@@ -76,7 +89,6 @@ export namespace MemoryStore {
       if (memCfg && memCfg.enabled === false) return false
       return true
     } catch {
-      // If config can't be read, default to enabled
       return true
     }
   }
@@ -84,6 +96,7 @@ export namespace MemoryStore {
   export async function init() {
     await mkdir(MEMORY_DIR, { recursive: true })
     await load()
+    await getRouter()
   }
 
   export async function load() {
@@ -140,6 +153,15 @@ export namespace MemoryStore {
 
     entries.push(content)
     await write(target, entries)
+
+    // Also add to cloud backends via router
+    try {
+      const r = await getRouter()
+      await r.add({ content, type: "text", target, source: "manual" })
+    } catch {
+      // Ignore cloud failures for local add
+    }
+
     return { success: true, entries: [...entries], usage: formatUsage(entries, limit) }
   }
 
@@ -208,21 +230,17 @@ export namespace MemoryStore {
     }
     if (!live) throw new Error("MemoryStore not initialized")
 
-    // Clear in-memory state
     const entries = target === "memory" ? live.memoryEntries : live.userEntries
     entries.length = 0
 
-    // Write empty content to file
     const file = target === "memory" ? MEMORY_FILE : USER_FILE
     await Filesystem.write(file, "")
 
-    // Verify the file is empty
     const verifyContent = await Filesystem.readText(file).catch(() => "VERIFY_FAILED")
     if (verifyContent !== "") {
       throw new Error(`Failed to verify clear: file contains "${verifyContent.slice(0, 50)}"`)
     }
 
-    // Update snapshot
     snapshot = buildSnapshot(live.memoryEntries, live.userEntries)
   }
 

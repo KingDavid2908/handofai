@@ -832,12 +832,12 @@ function createSandbox(ctx: SandboxContext, logs: string[] = []) {
       const libTempDir = os.tmpdir()
       const axiosDir = path.join(libTempDir, "handofai-libs-axios")
       
-      // Check if axios is already installed
       const axiosPath = path.join(axiosDir, "node_modules", "axios")
-      if (!fs.existsSync(axiosPath)) {
-        // Install axios
+      const formDataPath = path.join(axiosDir, "node_modules", "form-data")
+      if (!fs.existsSync(axiosPath) || !fs.existsSync(formDataPath)) {
+        fs.rmSync(axiosDir, { recursive: true, force: true })
         fs.mkdirSync(axiosDir, { recursive: true })
-        fs.writeFileSync(path.join(axiosDir, "package.json"), JSON.stringify({ name: "handofai-libs", dependencies: { axios: "*" } }))
+        fs.writeFileSync(path.join(axiosDir, "package.json"), JSON.stringify({ name: "handofai-libs", dependencies: { axios: "*", "form-data": "*" } }))
         spawnSync("bun", ["install"], { cwd: axiosDir, encoding: "utf-8" })
       }
       
@@ -1785,10 +1785,10 @@ When you see plugin installation instructions online:
 - ALWAYS use this plugin tool instead
 
 To install:
-  plugin({ action: "install", mod: "opencode-supermemory@latest", global: true })
+  plugin({ action: "install", mod: "plugin-name@latest", global: true })
 
 To remove:
-  plugin({ action: "remove", mod: "opencode-supermemory", global: true })
+  plugin({ action: "remove", mod: "plugin-name", global: true })
 
 Parameters:
   - action: "install" | "remove" (required)

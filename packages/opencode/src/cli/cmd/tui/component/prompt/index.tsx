@@ -2,6 +2,7 @@ import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, decodePasteB
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
+import { tmpdir } from "os"
 import { Filesystem } from "@/util/filesystem"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
@@ -38,6 +39,8 @@ import { DialogSkill } from "../dialog-skill"
 import { DialogMemory } from "../dialog-memory"
 import { DialogLessons } from "../dialog-lessons"
 import { DialogBrowser } from "../dialog-browser"
+import { DialogWebProvider } from "../dialog-web-provider"
+import { DialogMedia } from "../dialog-media"
 
 export type PromptProps = {
   sessionID?: string
@@ -535,6 +538,18 @@ export function Prompt(props: PromptProps) {
       },
     },
     {
+      title: "Web Providers",
+      value: "web-provider",
+      keybind: "web_provider",
+      category: "Web",
+      slash: {
+        name: "web-provider",
+      },
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogWebProvider />)
+      },
+    },
+    {
       title: "Lessons",
       value: "lessons",
       keybind: "lessons",
@@ -554,6 +569,16 @@ export function Prompt(props: PromptProps) {
       slash: { name: "browser" },
       onSelect: (dialog) => {
         dialog.replace(() => <DialogBrowser />)
+      },
+    },
+    {
+      title: "Media",
+      value: "media",
+      keybind: "media",
+      category: "Media",
+      slash: { name: "media", aliases: ["video", "image"] },
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogMedia />)
       },
     },
     {
@@ -790,7 +815,7 @@ export function Prompt(props: PromptProps) {
     )
   }
 
-  async function pasteImage(file: { filename?: string; content: string; mime: string }) {
+  async function pasteImage(file: { filename?: string; filepath?: string; content: string; mime: string }) {
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
     const count = store.prompt.parts.filter((x) => x.type === "file" && x.mime.startsWith("image/")).length
@@ -808,6 +833,14 @@ export function Prompt(props: PromptProps) {
       typeId: promptPartTypeId,
     })
 
+    // Save clipboard image/video/audio to temp file so vision tool has a real path
+    let filepath = file.filepath
+    if (!filepath && file.content) {
+      const ext = mimeToExt(file.mime)
+      filepath = path.join(tmpdir(), `handofai-clipboard-${Date.now()}.${ext}`)
+      await Bun.write(filepath, Buffer.from(file.content, "base64"))
+    }
+
     const part: Omit<FilePart, "id" | "messageID" | "sessionID"> = {
       type: "file" as const,
       mime: file.mime,
@@ -815,7 +848,7 @@ export function Prompt(props: PromptProps) {
       url: `data:${file.mime};base64,${file.content}`,
       source: {
         type: "file",
-        path: file.filename ?? "",
+        path: filepath ?? file.filename ?? "",
         text: {
           start: extmarkStart,
           end: extmarkEnd,
@@ -831,6 +864,24 @@ export function Prompt(props: PromptProps) {
       }),
     )
     return
+  }
+
+  function mimeToExt(mime: string): string {
+    switch (mime) {
+      case "image/png": return "png"
+      case "image/jpeg": return "jpg"
+      case "image/gif": return "gif"
+      case "image/bmp": return "bmp"
+      case "image/webp": return "webp"
+      case "image/svg+xml": return "svg"
+      case "video/mp4": return "mp4"
+      case "video/webm": return "webm"
+      case "video/quicktime": return "mov"
+      case "audio/mpeg": return "mp3"
+      case "audio/wav": return "wav"
+      case "audio/ogg": return "ogg"
+      default: return "png"
+    }
   }
 
   const highlight = createMemo(() => {
@@ -1028,13 +1079,17 @@ export function Prompt(props: PromptProps) {
                   return
                 }
 
+                // Once we cross an async boundary below, the terminal may perform its
+                // default paste unless we suppress it first and handle insertion ourselves.
+                event.preventDefault()
+
                 // trim ' from the beginning and end of the pasted content. just
                 // ' and nothing else
                 const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
                 const isUrl = /^(https?):\/\//.test(filepath)
                 if (!isUrl) {
                   try {
-                    const mime = Filesystem.mimeType(filepath)
+                    const mime = await Filesystem.mimeType(filepath)
                     const filename = path.basename(filepath)
                     // Handle SVG as raw text content, not as base64 image
                     if (mime === "image/svg+xml") {
@@ -1053,6 +1108,7 @@ export function Prompt(props: PromptProps) {
                       if (content) {
                         await pasteImage({
                           filename,
+                          filepath,
                           mime,
                           content,
                         })
@@ -1071,6 +1127,8 @@ export function Prompt(props: PromptProps) {
                   pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
                   return
                 }
+
+                input.insertText(normalizedText)
 
                 // Force layout update and render for the pasted content
                 setTimeout(() => {

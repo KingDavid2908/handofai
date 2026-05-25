@@ -173,6 +173,8 @@ export function tui(input: {
   headers?: RequestInit["headers"]
   events?: EventSource
 }) {
+  process.title = "handofaicli"
+
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
     const unguard = win32InstallCtrlCGuard()
@@ -345,30 +347,10 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
 
-  // Update terminal window title based on current route and session
+  // Always set terminal window title to handofai
   createEffect(() => {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
-
-    if (route.data.type === "home") {
-      renderer.setTerminalTitle("handofai")
-      return
-    }
-
-    if (route.data.type === "session") {
-      const session = sync.session.get(route.data.sessionID)
-      if (!session || SessionApi.isDefaultTitle(session.title)) {
-        renderer.setTerminalTitle("handofai")
-        return
-      }
-
-      const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`HF | ${title}`)
-      return
-    }
-
-    if (route.data.type === "plugin") {
-      renderer.setTerminalTitle(`HF | ${route.data.id}`)
-    }
+    renderer.setTerminalTitle("handofai")
   })
 
   const args = useArgs()
@@ -843,6 +825,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   sdk.event.on("session.error", (evt) => {
     const error = evt.properties.error
     if (error && typeof error === "object" && error.name === "MessageAbortedError") return
+    if (error && typeof error === "object" && typeof error.data?.message === "string" && error.data.message.includes("status code 400")) return
     const message = errorMessage(error)
 
     toast.show({

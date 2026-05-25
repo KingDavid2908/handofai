@@ -1111,9 +1111,90 @@ export namespace Config {
           user_char_limit: z.number().default(1375).describe("Max chars for USER.md (default: 1375)"),
           skill_creation_nudge_interval: z.number().default(10).describe("Tool-use iterations before skill review triggers (default: 10)"),
           review_enabled: z.boolean().default(true).describe("Enable background review agent (default: true)"),
+          backends: z
+            .object({
+              local: z.object({
+                enabled: z.boolean().default(true),
+                use_for: z.array(z.enum([
+                  "user_preferences", "project_knowledge", "code_patterns",
+                  "errors", "conversations", "images", "videos", "audio", "documents"
+                ])).default(["user_preferences", "project_knowledge", "code_patterns", "errors"]),
+              }).default(() => ({
+                enabled: true,
+                use_for: ["user_preferences", "project_knowledge", "code_patterns", "errors"] as ("user_preferences" | "project_knowledge" | "code_patterns" | "errors" | "conversations" | "images" | "videos" | "audio" | "documents")[],
+              })),
+              supermemory: z.object({
+                enabled: z.boolean().default(false),
+                api_key: z.string().optional(),
+                user_container_tag: z.string().optional(),
+                project_container_tag: z.string().optional(),
+                similarity_threshold: z.number().default(0.6),
+                max_memories: z.number().default(5),
+                max_project_memories: z.number().default(10),
+                use_for: z.array(z.enum([
+                  "user_preferences", "project_knowledge", "code_patterns",
+                  "errors", "conversations", "images", "videos", "audio", "documents"
+                ])).default(["user_preferences", "project_knowledge", "code_patterns", "errors", "conversations"]),
+              }).optional(),
+              graphlit: z.object({
+                enabled: z.boolean().default(false),
+                organization_id: z.string().optional(),
+                environment_id: z.string().optional(),
+                jwt_secret: z.string().optional(),
+                use_for: z.array(z.enum([
+                  "user_preferences", "project_knowledge", "code_patterns",
+                  "errors", "conversations", "images", "videos", "audio", "documents"
+                ])).default(["images", "videos", "audio", "documents"]),
+              }).optional(),
+            }).optional(),
+          save_behavior: z.enum(["smart", "everything"]).default("smart"),
+          save_prompt: z.string().optional(),
+          save_model: z
+            .object({
+              provider_id: z.string().optional(),
+              model_id: z.string().optional(),
+              auto: z.boolean().default(true),
+            })
+            .optional()
+            .describe("Model used for memory auto-save. auto=true uses the current session model."),
         })
         .optional()
         .describe("Memory system configuration for persistent cross-session learning"),
+      web: z
+        .object({
+          search: z
+            .object({
+              providers: z
+                .array(z.enum(["exa", "tinyfish", "tavily", "firecrawl"]))
+                .default(["exa"])
+                .describe("Ordered list of search providers (primary → fallback)"),
+              api_keys: z.record(z.string(), z.string()).optional().describe("API keys for search providers"),
+            })
+            .optional()
+            .describe("Web search provider configuration"),
+          fetch: z
+            .object({
+              providers: z
+                .array(z.enum(["direct", "tinyfish", "tavily", "firecrawl"]))
+                .default(["direct"])
+                .describe("Ordered list of fetch providers (primary → fallback)"),
+              api_keys: z.record(z.string(), z.string()).optional().describe("API keys for fetch providers"),
+            })
+            .optional()
+            .describe("Web fetch provider configuration"),
+        })
+        .optional()
+        .describe("Web provider hub configuration for search and fetch fallback chains"),
+      media: z
+        .object({
+          hf_token: z.string().optional().describe("Hugging Face access token for HF Spaces inference"),
+        })
+        .optional()
+        .describe("Media tool configuration for video, image, and audio generation/editing"),
+      session_list_scope: z
+        .enum(["global", "project"])
+        .optional()
+        .describe("Default scope for /sessions: global (all projects) or project (current project only)"),
       lessons: z
         .object({
           enabled: z.boolean().default(true).describe("Enable lessons injection into system prompt (default: true). Tool and writing are always available."),

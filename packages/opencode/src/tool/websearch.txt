@@ -1,14 +1,20 @@
-- Search the web using Exa AI - performs real-time web searches and can scrape content from specific URLs
+- Search the web using a hierarchical provider chain with automatic fallback
+- Providers are tried in order: primary → fallback → fallback-of-fallback
 - Provides up-to-date information for current events and recent data
 - Supports configurable result counts and returns the content from the most relevant websites
 - Use this tool for accessing information beyond knowledge cutoff
 - Searches are performed automatically within a single API call
 
+Available providers (configured via /web-provider):
+  - Exa: Neural search with live crawling, fast/auto/deep modes (default)
+  - TinyFish Search: Ranked search results with geo-targeting, free tier
+  - Tavily: AI-optimized search API
+  - Firecrawl Search: Web search with full page content extraction
+
 Usage notes:
-  - Supports live crawling modes: 'fallback' (backup if cached unavailable) or 'preferred' (prioritize live crawling)
-  - Search types: 'auto' (balanced), 'fast' (quick results), 'deep' (comprehensive search)
+  - Exa-specific: livecrawl modes ('fallback' or 'preferred'), search types ('auto', 'fast', 'deep')
   - Configurable context length for optimal LLM integration
-  - Domain filtering and advanced search options available
+  - Fallback chain is automatic — if primary fails, the next provider is tried
 
 The current year is {{year}}. You MUST use this year when searching for recent information or current events
 - Example: If the current year is 2026 and the user asks for "latest AI news", search for "AI news 2026", NOT "AI news 2025"

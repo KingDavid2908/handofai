@@ -262,12 +262,13 @@ export namespace ProviderTransform {
         const filename = part.type === "file" ? part.filename : undefined
         const modality = mimeToModality(mime)
         if (!modality) return part
-        if (model.capabilities.input[modality]) return part
 
         const name = filename ? `"${filename}"` : modality
+        const sourcePath = part.type === "file" ? (part as any).source?.path : undefined
+        const sourceText = sourcePath && typeof sourcePath === "string" ? ` source="${sourcePath}"` : ""
         return {
           type: "text" as const,
-          text: `ERROR: Cannot read ${name} (this model does not support ${modality} input). Inform the user.`,
+          text: `[Attached ${modality}: ${name}] Call the vision tool to analyze this attachment${sourceText}. The vision tool uses a dedicated vision model and works regardless of the current model's capabilities.`,
         }
       })
 

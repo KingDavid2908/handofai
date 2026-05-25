@@ -21,6 +21,9 @@ import { SystemPrompt } from "./system"
 import { InstructionPrompt } from "./instruction"
 import { MemoryService } from "../memory"
 import { MemoryNudge } from "../memory/nudge"
+import { MemoryAutoSave } from "../memory/auto-save"
+import { MemoryKeywordDetect } from "../memory/keyword-detect"
+import { MemoryContextInject } from "../memory/context-inject"
 import { LessonService } from "@/lessons"
 import { BackgroundReview } from "../learning/review"
 import { Plugin } from "../plugin"
@@ -329,6 +332,69 @@ export namespace SessionPrompt {
       }
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+
+      // Keyword detection: scan user message for memory triggers
+      const userText = msgs
+        .filter((m) => m.info.role === "user" && m.info.id === lastUser.id)
+        .flatMap((m) => m.parts)
+        .filter((p): p is MessageV2.TextPart => p.type === "text")
+        .map((p) => p.text)
+        .join(" ")
+      if (MemoryKeywordDetect.detect(userText)) {
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: lastUser.id,
+          sessionID,
+          type: "text",
+          text: MemoryKeywordDetect.buildNudge(),
+          synthetic: true,
+        })
+      }
+
+      // Image/video/audio attachment detection: inject file path for vision tool
+      const mediaParts = msgs
+        .filter((m) => m.info.role === "user" && m.info.id === lastUser.id)
+        .flatMap((m) => m.parts)
+        .filter((p) => p.type === "file" && typeof (p as any).mime === "string" && ((p as any).mime.startsWith("image/") || (p as any).mime.startsWith("video/") || (p as any).mime.startsWith("audio/")))
+      const placeholders = new Set(["clipboard", "image", "video", "audio", "paste"])
+      for (const part of mediaParts) {
+        const sourcePath = (part as any).source?.path as string | undefined
+        const url = (part as any).url as string | undefined
+        let source = ""
+        if (sourcePath && typeof sourcePath === "string" && !placeholders.has(sourcePath) && !sourcePath.startsWith("data:")) {
+          source = sourcePath
+        } else if (url && !url.startsWith("data:")) {
+          source = url
+        }
+
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: lastUser.id,
+          sessionID,
+          type: "text",
+          text: source
+            ? `[VISUAL CONTENT DETECTED]\nThe user has attached an image or video. Call the vision tool to analyze it with source="${source}"\nThe vision tool uses a dedicated vision model and works regardless of the current model's capabilities.`
+            : `[VISUAL CONTENT DETECTED]\nThe user has attached an image or video. Use the vision tool to analyze it — call vision with no source to auto-detect the most recent attachment. The vision tool uses a dedicated vision model and works regardless of the current model's capabilities.`,
+          synthetic: true,
+        })
+      }
+
+      // First-message context injection
+      const assistantCount = msgs.filter((m) => m.info.role === "assistant").length
+      if (assistantCount === 0) {
+        const contextText = await MemoryContextInject.injectOnFirstMessage(sessionID)
+        if (contextText) {
+          await Session.updatePart({
+            id: PartID.ascending(),
+            messageID: lastUser.id,
+            sessionID,
+            type: "text",
+            text: contextText,
+            synthetic: true,
+          })
+        }
+      }
+
       if (
         lastAssistant?.finish &&
         ![
@@ -835,15 +901,8 @@ export namespace SessionPrompt {
         })
       }
 
-      // Check memory nudge
-      await MemoryService.incrementTurn(sessionID)
-      if (await MemoryService.checkNudge(sessionID)) {
-        MemoryNudge.review({
-          sessionID,
-          model: lastUser.model,
-          agent,
-        }).catch((e) => log.error("memory nudge failed", { error: e }))
-      }
+      // Per-turn auto-save
+      MemoryAutoSave.run(sessionID, lastUser.model).catch((e) => log.error("memory auto-save failed", { error: e }))
 
       continue
     }
@@ -931,7 +990,8 @@ export namespace SessionPrompt {
         "memory", "vision", "skill", "todo", "codesearch", "session_search", "lesson", "skills_list",
         "skill_manage", "moa", "cronjob", "apply_patch", "question", "process", "shell", "filesystem",
         "list", "multiedit", "webfetch", "plan_enter", "plan_exit", "discover", "plugin", "typescript",
-        "batch", "connector", "lsp", "truncate", "skills_list", "skill_manage"
+        "batch", "connector", "lsp", "truncate", "skills_list", "skill_manage",
+        "media",
       ].includes(item.id)
       
       if (!isBuiltin && !sessionTools.hasTool(item.id)) {

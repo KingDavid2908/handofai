@@ -439,6 +439,11 @@ export namespace SessionProcessor {
             yield* bus.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
             return
           }
+          if (MessageV2.APIError.isInstance(error) && error.data.statusCode === 400) {
+            log.warn("suppressing spurious 400", { message: error.data.message })
+            yield* status.set(ctx.sessionID, { type: "idle" })
+            return
+          }
           ctx.assistantMessage.error = error
           yield* bus.publish(Session.Event.Error, {
             sessionID: ctx.assistantMessage.sessionID,

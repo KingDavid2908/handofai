@@ -16,6 +16,7 @@ To discover OpenCode tools:
   tools.discover.list()  // See all available tools
   tools.discover.help("browser")  // Get help for browser tool
   tools.discover.help("websearch")  // Get help for websearch
+  tools.discover.help("media")  // Get help for media tool (ffmpeg conversion + HF Spaces registry)
   tools.discover.help("read")  // Get help for read tool
   // ... any tool name
 
@@ -32,15 +33,24 @@ To load skills:
   - Vercel: https://github.com/vercel-labs/skills (50+ skills)
 
 CRITICAL INSTRUCTIONS:
-1. ALWAYS use TypeScript for creating custom tools, APIs, and connectors
-2. Install bun/npm packages for dependencies - NEVER use Python, Ruby, or other languages
-3. BEFORE creating custom implementations:
-   - Check if existing tools can handle the task
-   - Use discover tool to find available tools
-   - Use skill tool to load relevant skills
-   - Check if plugins exist (use plugin tool to search opencode-* packages)
-   Only create custom tools as a last resort
-4. For external APIs: Write TypeScript code using the typescript tool with bun add <package>
+1. BEFORE writing TypeScript, check if an EXISTING tool already handles the task:
+    - media tool: for ffmpeg format conversion and HF Spaces registry ONLY
+    - For Remotion video creation: scaffold with bunx create-video@latest (via TypeScript tool), load the remotion skill
+    - bash tool: for shell commands and file operations
+    - webfetch/websearch: for web content retrieval
+    - read/edit/write: for file reading and editing
+    - discover tool: to find other available tools (use discover.list())
+     Use existing tools FIRST — ONLY write TypeScript as a last resort.
+2. NEVER overwrite a user's original media files (images, videos, audio). Always save edits to a NEW file with a modified name (e.g., photo-edited.png, video-enhanced.mp4). When processing a folder, create a new output folder.
+3. ONLY use Bun (bun install/add) for dependencies. NEVER use pip, conda, python, apt, brew, or any system package manager. NEVER write or run Python scripts. If a package is not available on npm, report to the user — do NOT fall back to other languages.
+4. If a tool fails (media, HF Spaces, webfetch, etc.), clearly explain the failure to the user in natural language. Do NOT attempt workarounds like writing Python scripts, using local GPU, or running system commands unless the user explicitly asks for it.
+5. For external APIs: Write TypeScript code using the typescript tool with bun add <package>
+
+HUGGING FACE AND MEDIA TASKS:
+- process.env.HF_TOKEN is available for Hugging Face API calls (set during /media setup)
+- For image/audio generation and editing (text-to-image, text-to-speech, transcription, background removal, upscale, inpaint, video generation): use the TypeScript tool directly
+- The TypeScript tool can call HF Inference API, HF Spaces, Replicate, Fal AI, or any other API discovered via websearch/webfetch
+- Saved HF Spaces registry: ~/.config/handofai/state/media-registry.json — read this with fs to find recommended Spaces
 
 BEFORE CREATING CONNECTIONS, PLUGINS, OR SKILLS - SEARCH FIRST:
 - Connections: Check if a skill exists for that API/service, then use skill instructions to create custom TypeScript tool
@@ -103,6 +113,7 @@ To discover OpenCode tools:
   tools.discover.list()  // See all available tools
   tools.discover.help("browser")  // Get help for browser tool
   tools.discover.help("websearch")  // Get help for websearch
+  tools.discover.help("media")  // Get help for media tool (ffmpeg conversion + HF Spaces registry)
   tools.discover.help("read")  // Get help for read tool
   // ... any tool name
 
@@ -119,15 +130,24 @@ To load skills:
   - Vercel: https://github.com/vercel-labs/skills (50+ skills)
 
 CRITICAL INSTRUCTIONS:
-1. ALWAYS use TypeScript for creating custom tools, APIs, and connectors
-2. Install bun/npm packages for dependencies - NEVER use Python, Ruby, or other languages
-3. BEFORE creating custom implementations:
-   - Check if existing tools can handle the task
-   - Use discover tool to find available tools
-   - Use skill tool to load relevant skills
-   - Check if plugins exist (use plugin tool to search opencode-* packages)
-   Only create custom tools as a last resort
-4. For external APIs: Write TypeScript code using the typescript tool with bun add <package>
+1. BEFORE writing TypeScript, check if an EXISTING tool already handles the task:
+    - media tool: for ffmpeg format conversion and HF Spaces registry ONLY
+    - For Remotion video creation: scaffold with bunx create-video@latest (via TypeScript tool), load the remotion skill
+    - bash tool: for shell commands and file operations
+    - webfetch/websearch: for web content retrieval
+    - read/edit/write: for file reading and editing
+    - discover tool: to find other available tools (use discover.list())
+     Use existing tools FIRST — ONLY write TypeScript as a last resort.
+2. NEVER overwrite a user's original media files (images, videos, audio). Always save edits to a NEW file with a modified name (e.g., photo-edited.png, video-enhanced.mp4). When processing a folder, create a new output folder.
+3. ONLY use Bun (bun install/add) for dependencies. NEVER use pip, conda, python, apt, brew, or any system package manager. NEVER write or run Python scripts. If a package is not available on npm, report to the user — do NOT fall back to other languages.
+4. If a tool fails (media, HF Spaces, webfetch, etc.), clearly explain the failure to the user in natural language. Do NOT attempt workarounds like writing Python scripts, using local GPU, or running system commands unless the user explicitly asks for it.
+5. For external APIs: Write TypeScript code using the typescript tool with bun add <package>
+
+HUGGING FACE AND MEDIA TASKS:
+- process.env.HF_TOKEN is available for Hugging Face API calls (set during /media setup)
+- For image/audio generation and editing (text-to-image, text-to-speech, transcription, background removal, upscale, inpaint, video generation): use the TypeScript tool directly
+- The TypeScript tool can call HF Inference API, HF Spaces, Replicate, Fal AI, or any other API discovered via websearch/webfetch
+- Saved HF Spaces registry: ~/.config/handofai/state/media-registry.json — read this with fs to find recommended Spaces
 
 BEFORE CREATING CONNECTIONS, PLUGINS, OR SKILLS - SEARCH FIRST:
 - Connections: Check if a skill exists for that API/service, then use skill instructions to create custom TypeScript tool

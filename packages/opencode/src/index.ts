@@ -39,6 +39,7 @@ import { PluginCommand } from "./cli/cmd/plug"
 import { VisionCommand } from "./cli/cmd/vision"
 import { CronCommand } from "./cli/cmd/cron"
 import { BrowserCommand } from "./cli/cmd/browser"
+import { MediaCommand } from "./cli/cmd/media"
 import { NanoBrowserBridge } from "./tool/browser/bridge"
 
 process.on("unhandledRejection", (e) => {
@@ -156,6 +157,7 @@ const cli = yargs(hideBin(process.argv))
   .command(VisionCommand)
   .command(CronCommand)
   .command(BrowserCommand)
+  .command(MediaCommand)
   .command(StatsCommand)
   .command(ExportCommand)
   .command(ImportCommand)

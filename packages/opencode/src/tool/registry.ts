@@ -33,6 +33,7 @@ import { Plugin } from "../plugin"
 import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
 import { CodeSearchTool } from "./codesearch"
+import { MediaTool } from "./media"
 import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
@@ -153,6 +154,7 @@ export namespace ToolRegistry {
           MixtureOfAgentsTool,
           CronjobTool,
           BrowserTool,
+          MediaTool,
           TypeScriptTool,
           ApplyPatchTool,
           DiscoverTool,
@@ -186,21 +188,17 @@ export namespace ToolRegistry {
       ) {
         const state = yield* InstanceState.get(cache)
         const allTools = yield* all(state.custom)
-        const filtered = allTools.filter((tool) => {
-          if (tool.id === "codesearch" || tool.id === "websearch") {
-            return model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
-          }
+          const filtered = allTools.filter((tool) => {
+            const usePatch =
+              typeof model.modelID === "string" &&
+              model.modelID.includes("gpt-") &&
+              !model.modelID.includes("oss") &&
+              !model.modelID.includes("gpt-4")
+            if (tool.id === "apply_patch") return usePatch
+            if (tool.id === "edit" || tool.id === "write") return !usePatch
 
-          const usePatch =
-            typeof model.modelID === "string" &&
-            model.modelID.includes("gpt-") &&
-            !model.modelID.includes("oss") &&
-            !model.modelID.includes("gpt-4")
-          if (tool.id === "apply_patch") return usePatch
-          if (tool.id === "edit" || tool.id === "write") return !usePatch
-
-          return true
-        })
+            return true
+          })
         return yield* Effect.forEach(
           filtered,
           Effect.fnUntraced(function* (tool) {

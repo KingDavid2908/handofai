@@ -17,6 +17,7 @@ import { ConfigMarkdown } from "../config/markdown"
 import { Glob } from "../util/glob"
 import { Log } from "../util/log"
 import { Discovery } from "./discovery"
+import { installBundledSkills } from "./init"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -205,6 +206,7 @@ export namespace Skill {
       const discovery = yield* Discovery.Service
       const config = yield* Config.Service
       const bus = yield* Bus.Service
+      yield* Effect.promise(() => installBundledSkills())
       const state = yield* InstanceState.make(
         Effect.fn("Skill.state")(function* (ctx) {
           const s: State = { skills: {}, dirs: new Set() }

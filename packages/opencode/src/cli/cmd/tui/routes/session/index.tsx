@@ -1362,7 +1362,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           </text>
         </box>
       </Show>
-      <Show when={props.message.error && props.message.error.name !== "MessageAbortedError"}>
+      <Show when={props.message.error && props.message.error.name !== "MessageAbortedError" && !(typeof props.message.error.data?.message === "string" && props.message.error.data.message.includes("status code 400"))}>
         <box
           border={["left"]}
           paddingTop={1}
@@ -1950,7 +1950,7 @@ function WebSearch(props: ToolProps<any>) {
   const metadata = props.metadata as any
   return (
     <InlineTool icon="◈" pending="Searching web..." complete={input.query} part={props.part}>
-      Exa Web Search "{input.query}" <Show when={metadata.numResults}>({metadata.numResults} results)</Show>
+      Web Search "{input.query}" <Show when={metadata.numResults}>({metadata.numResults} results)</Show>
     </InlineTool>
   )
 }

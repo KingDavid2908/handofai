@@ -1,8 +1,15 @@
-- Fetches content from a specified URL
+- Fetches content from a specified URL using a hierarchical provider chain with automatic fallback
+- Providers are tried in order: primary → fallback → fallback-of-fallback
 - Takes a URL and optional format as input
 - Fetches the URL content, converts to requested format (markdown by default)
 - Returns the content in the specified format
 - Use this tool when you need to retrieve and analyze web content
+
+Available providers (configured via /web-provider):
+  - Direct: Raw HTTP fetch with HTML-to-markdown conversion (default)
+  - TinyFish Fetch: Real browser rendering, handles JS-heavy sites and SPAs, PDF extraction, free tier
+  - Tavily Extract: Structured content extraction from any URL
+  - Firecrawl Scrape: Web scraping with structured data extraction, handles dynamic content
 
 Usage notes:
   - IMPORTANT: if another tool is present that offers better web fetching capabilities, is more targeted to the task, or has fewer restrictions, prefer using that tool instead of this one.
@@ -11,3 +18,4 @@ Usage notes:
   - Format options: "markdown" (default), "text", or "html"
   - This tool is read-only and does not modify any files
   - Results may be summarized if the content is very large
+  - Fallback chain is automatic — if primary fails, the next provider is tried

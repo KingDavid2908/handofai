@@ -7,6 +7,8 @@ import { Global } from "../global"
 import type { Provider } from "../provider/provider"
 import { Provider as ProviderModule } from "../provider/provider"
 import Decimal from "decimal.js"
+import { MessageV2 } from "../session/message-v2"
+import { SessionID } from "../session/schema"
 
 const MAX_DOWNLOAD_SIZE = 10 * 1024 * 1024
 const RETRY_DELAYS = [2000, 4000, 8000]
@@ -23,20 +25,37 @@ const PRIVATE_IP_PATTERNS = [
   /^fd00:/,
 ]
 
-const IMAGE_MIMES = new Set([
+const MEDIA_MIMES = new Set([
   "image/png",
   "image/jpeg",
   "image/gif",
   "image/bmp",
   "image/webp",
   "image/svg+xml",
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+  "audio/mpeg",
+  "audio/wav",
+  "audio/ogg",
+  "audio/mp4",
 ])
 
+function isMediaMime(mime: string): boolean {
+  return MEDIA_MIMES.has(mime) || mime.startsWith("image/") || mime.startsWith("video/") || mime.startsWith("audio/")
+}
+
 export const VisionTool = Tool.define("vision", {
-  description: "Analyze images using AI vision. Provide an image URL or local file path, and optionally a question about the image.",
+  description:
+    "Analyze images, videos, and audio using a dedicated vision-capable model (separate from the current model). " +
+    "Call this tool when the user pastes or attaches an image/video/audio — the vision model handles it regardless of whether the current model supports image input. " +
+    "Pass a URL (http/https), local file path, data: URI, or omit source to auto-detect the most recent attachment in the conversation.",
   parameters: z.object({
-    source: z.string().describe("Image URL (http/https) or local file path to analyze"),
-    question: z.string().optional().describe("Specific question about the image (auto-describes if omitted)"),
+    source: z
+      .string()
+      .optional()
+      .describe("Image/video/audio URL, file path, data: URI, or omit to use the most recent pasted attachment. This tool uses a separate vision model and works even if the current model lacks vision capabilities."),
+    question: z.string().optional().describe("Specific question about the media (auto-describes if omitted)"),
   }),
   async execute(params, ctx) {
     const currentModel = ctx.extra?.model as Provider.Model | undefined
@@ -44,22 +63,48 @@ export const VisionTool = Tool.define("vision", {
       throw new Error("Could not determine current model. Please ensure you have a model configured.")
     }
 
-    // Download or read image first
-    const isUrl = params.source.startsWith("http://") || params.source.startsWith("https://")
+    let source = params.source
     let imageData: Buffer
     let mime: string
 
-    if (isUrl) {
-      const url = new URL(params.source)
+    // Auto-detect from conversation context if no source provided
+    if (!source || source === "context") {
+      const attachment = await findRecentAttachment(ctx.extra?.sessionID as string | undefined)
+      if (!attachment) {
+        throw new Error(
+          "No source provided and no recent image/video attachment found in the conversation. " +
+            "Please provide a URL, file path, data: URI, or paste an image into the prompt.",
+        )
+      }
+      if (attachment.url.startsWith("data:")) {
+        source = attachment.url
+      } else if (attachment.url.startsWith("http")) {
+        source = attachment.url
+      } else {
+        source = attachment.url
+      }
+      mime = attachment.mime
+    }
 
-      if (!await isUrlSafe(url)) {
-        throw new Error(`URL blocked: ${params.source} resolves to a private or internal network address.`)
+    // Parse data: URI
+    if (source!.startsWith("data:")) {
+      const match = source!.match(/^data:([^;]+);base64,(.+)$/)
+      if (!match) {
+        throw new Error("Invalid data: URI format. Expected data:<mime>;base64,<payload>")
+      }
+      mime = match[1]
+      imageData = Buffer.from(match[2], "base64")
+    } else if (source!.startsWith("http://") || source!.startsWith("https://")) {
+      const url = new URL(source!)
+
+      if (!(await isUrlSafe(url))) {
+        throw new Error(`URL blocked: ${source} resolves to a private or internal network address.`)
       }
 
       imageData = await downloadWithRetry(url.toString())
       mime = detectMimeFromUrl(url.toString(), imageData)
     } else {
-      let filepath = params.source
+      let filepath = source!
       if (!path.isAbsolute(filepath)) {
         filepath = path.resolve(Instance.directory, filepath)
       }
@@ -73,15 +118,19 @@ export const VisionTool = Tool.define("vision", {
       }
 
       imageData = await Filesystem.readBytes(filepath)
-      mime = Filesystem.mimeType(filepath) ?? "application/octet-stream"
+      mime = await Filesystem.mimeType(filepath) ?? "application/octet-stream"
     }
 
-    if (!IMAGE_MIMES.has(mime)) {
-      throw new Error(`Unsupported image format: ${mime}. Supported formats: PNG, JPEG, GIF, BMP, WebP, SVG`)
+    if (!isMediaMime(mime)) {
+      throw new Error(
+        `Unsupported media format: ${mime}. Supported formats: PNG, JPEG, GIF, BMP, WebP, SVG, MP4, WebM, QuickTime`,
+      )
     }
 
     const dataUrl = `data:${mime};base64,${imageData.toString("base64")}`
-    const question = params.question ?? "Describe this image in detail."
+    const question = params.question ?? "Describe this media in detail."
+    const isVideo = mime.startsWith("video/")
+    const mediaLabel = isVideo ? "Video" : "Image"
 
     // Check if a vision model is explicitly configured in state
     const stateModel: Record<string, unknown> = await Filesystem.readJson(
@@ -90,13 +139,15 @@ export const VisionTool = Tool.define("vision", {
     const visionModelEntry = (stateModel.visionModel as { providerID: string; modelID: string } | null) ?? null
 
     if (visionModelEntry) {
-      const { providerID, modelID } = ProviderModule.parseModel(`${visionModelEntry.providerID}/${visionModelEntry.modelID}`)
+      const { providerID, modelID } = ProviderModule.parseModel(
+        `${visionModelEntry.providerID}/${visionModelEntry.modelID}`,
+      )
       const model = await ProviderModule.getModel(providerID, modelID).catch(() => null)
 
       if (model) {
-        const { analysis, cost } = await analyzeWithModel(dataUrl, question, model)
+        const { analysis, cost } = await analyzeWithModel(dataUrl, question, model, isVideo)
         return {
-          title: `Vision: ${path.basename(params.source)}`,
+          title: `Vision: ${mediaLabel}`,
           output: analysis,
           metadata: { cost },
         }
@@ -111,9 +162,9 @@ export const VisionTool = Tool.define("vision", {
     // No vision model configured — check if current model has vision
     if (currentModel.capabilities.input.image) {
       return {
-        title: `Vision: ${path.basename(params.source)}`,
-        output: `Image loaded successfully`,
-        metadata: {},
+        title: `Vision: ${mediaLabel}`,
+        output: `${mediaLabel} loaded successfully`,
+        metadata: { cost: 0 },
         attachments: [
           {
             type: "file",
@@ -130,6 +181,45 @@ export const VisionTool = Tool.define("vision", {
     )
   },
 })
+
+async function findRecentAttachment(
+  sessionID: string | undefined,
+): Promise<{ url: string; mime: string } | null> {
+  if (!sessionID) return null
+
+  try {
+    const sid = SessionID.make(sessionID)
+    const messages: MessageV2.Info[] = []
+    for await (const item of MessageV2.stream(sid)) {
+      messages.push(item.info)
+    }
+
+    // Scan backwards through messages for file attachments
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i]
+      if (msg.role !== "user") continue
+
+      const parts = await MessageV2.parts(msg.id)
+      for (const part of parts) {
+        if (part.type === "file" && isMediaMime(part.mime)) {
+          // Prefer real filesystem path from source for clipboard/temp images
+          const sourcePath = (part as any).source?.path as string | undefined
+          if (sourcePath && typeof sourcePath === "string" && sourcePath.length > 0) {
+            const placeholderNames = new Set(["clipboard", "image", "video", "audio", "paste"])
+            if (!placeholderNames.has(sourcePath) && !sourcePath.startsWith("data:")) {
+              return { url: sourcePath, mime: part.mime }
+            }
+          }
+          return { url: part.url, mime: part.mime }
+        }
+      }
+    }
+  } catch {
+    // Ignore errors
+  }
+
+  return null
+}
 
 async function isUrlSafe(url: URL): Promise<boolean> {
   try {
@@ -212,13 +302,25 @@ function detectMimeFromUrl(url: string, data: Buffer): string {
     const pathname = new URL(url).pathname
     const ext = pathname.split(".").pop()?.toLowerCase()
     switch (ext) {
-      case "png": return "image/png"
+      case "png":
+        return "image/png"
       case "jpg":
-      case "jpeg": return "image/jpeg"
-      case "gif": return "image/gif"
-      case "bmp": return "image/bmp"
-      case "webp": return "image/webp"
-      case "svg": return "image/svg+xml"
+      case "jpeg":
+        return "image/jpeg"
+      case "gif":
+        return "image/gif"
+      case "bmp":
+        return "image/bmp"
+      case "webp":
+        return "image/webp"
+      case "svg":
+        return "image/svg+xml"
+      case "mp4":
+        return "video/mp4"
+      case "webm":
+        return "video/webm"
+      case "mov":
+        return "video/quicktime"
     }
   } catch {
     // Ignore URL parsing errors
@@ -231,10 +333,13 @@ async function analyzeWithModel(
   imageDataUrl: string,
   question: string,
   model: Provider.Model,
+  isVideo: boolean,
 ): Promise<{ analysis: string; cost: number }> {
   const language = await ProviderModule.getLanguage(model)
 
   const { streamText } = await import("ai")
+
+  const mediaType = isVideo ? "video" : "image"
 
   const result = streamText({
     model: language,
@@ -244,16 +349,16 @@ async function analyzeWithModel(
         content: [
           {
             type: "text",
-            text: `Analyze this image and answer the following question:\n\n${question}`,
+            text: `Analyze this ${mediaType} and answer the following question:\n\n${question}`,
           },
           {
-            type: "image",
+            type: isVideo ? ("image" as any) : "image",
             image: imageDataUrl,
           },
         ],
       },
     ],
-    system: "You are a helpful assistant that analyzes images. Provide detailed, accurate descriptions and answers.",
+    system: `You are a helpful assistant that analyzes ${mediaType}s. Provide detailed, accurate descriptions and answers.`,
   })
 
   let response = ""
@@ -271,16 +376,17 @@ async function analyzeWithModel(
 
 function calcCost(model: Provider.Model, usage: any): number {
   if (!usage) return 0
-  const safe = (v: number) => Number.isFinite(v) ? v : 0
+  const safe = (v: number) => (Number.isFinite(v) ? v : 0)
   const inputTokens = safe(usage.inputTokens ?? 0)
   const outputTokens = safe(usage.outputTokens ?? 0)
   const reasoningTokens = safe(usage.reasoningTokens ?? 0)
   const cacheRead = safe(usage.cachedInputTokens ?? 0)
   const cacheWrite = safe(usage.cacheCreationInputTokens ?? 0)
   const adjustedInput = safe(inputTokens - cacheRead - cacheWrite)
-  const costInfo = model.cost?.experimentalOver200K && adjustedInput + cacheRead > 200_000
-    ? model.cost.experimentalOver200K
-    : model.cost
+  const costInfo =
+    model.cost?.experimentalOver200K && adjustedInput + cacheRead > 200_000
+      ? model.cost.experimentalOver200K
+      : model.cost
   if (!costInfo) return 0
   return safe(
     new Decimal(0)
@@ -289,6 +395,6 @@ function calcCost(model: Provider.Model, usage: any): number {
       .add(new Decimal(cacheRead).mul(costInfo.cache?.read ?? 0).div(1_000_000))
       .add(new Decimal(cacheWrite).mul(costInfo.cache?.write ?? 0).div(1_000_000))
       .add(new Decimal(reasoningTokens).mul(costInfo.output ?? 0).div(1_000_000))
-      .toNumber()
+      .toNumber(),
   )
 }

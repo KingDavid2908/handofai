@@ -1,0 +1,85 @@
+- PRIMARY TOOL for video creation (Remotion) and format conversion (ffmpeg)
+- For video creation: uses Remotion (React components rendered to MP4)
+- For format conversion: uses ffmpeg (must be installed)
+- The /media dialog is for setup, configuration, and registry management. All actual video operations happen via natural language prompts in the main chat.
+
+CRITICAL — Use this media tool ONLY for these actions:
+  - create_video, render_video, list_compositions, studio, close_studio, restart_studio (Remotion)
+  - convert_media (ffmpeg)
+  - save_space, update_registry, add_category, list_registry (registry management)
+
+CRITICAL — For ALL image/audio generation and editing, use the TypeScript tool directly:
+  - generate_image, edit_image, generate_audio, transcribe_audio, generate_video
+  - The TypeScript tool has access to process.env.HF_TOKEN for Hugging Face API calls
+  - The TypeScript tool can use HF Inference API, HF Spaces, Replicate, Fal AI, or any other API it discovers
+
+CRITICAL — NEVER overwrite the user's original media files:
+  - When editing an image, video, or audio file, always save to a NEW file (append -edited, -upscaled, -bgremoved etc. to the original name)
+  - When processing an entire folder, create a new output folder and save copies there
+  - The source parameter is the INPUT file — the output parameter or auto-generated output name must differ from the source
+  - Example: editing "photo.png" → save as "photo-edited.png", NOT overwriting "photo.png"
+
+CRITICAL — If a tool returns "no output", "[no output]", or a file path that doesn't exist, that is a FAILURE.
+Do NOT search for files. Do NOT use bash/dir/ls to look for files. Immediately fall back to the TypeScript tool.
+
+Video actions (Remotion):
+  - create_video: Generate a new Remotion composition from a template or prompt
+  - render_video: Render an existing composition to MP4
+  - list_compositions: List all available compositions in the workspace
+  - studio: Open Remotion Studio preview URL (auto-opens browser)
+
+Conversion actions (ffmpeg):
+  - convert_media: Convert between media formats (mp4, gif, mp3, wav, etc.)
+
+Registry actions (manage saved Spaces and categories):
+  - save_space: Save a favorite Space to a category for reference
+  - update_registry: Refresh the curated Space registry from HF API
+  - add_category: Create a custom category (e.g. "audio-to-video")
+  - list_registry: Show registry summary with categories and space counts
+
+Decision guide:
+  - User wants a video from scratch → media tool: create_video with Remotion
+  - User wants to convert a file format → media tool: convert_media with ffmpeg
+  - User wants to generate an image → TypeScript tool with HF Inference API or Spaces
+  - User wants text-to-speech → TypeScript tool with HF Inference API or Spaces
+  - User wants to edit an image (background removal, upscale, inpaint) → TypeScript tool with HF Spaces or other API
+  - User wants to generate a video from text/image → TypeScript tool with HF Spaces or other API
+
+Parameters:
+  - action: The operation to perform
+  - name: For Remotion create_video, the composition name (e.g. "MyAnimation"). For save_space, the Space ID.
+  - source: Input file path (for convert_media)
+  - prompt: For Remotion create_video: component code or description.
+  - output: Output file path (defaults to current project directory)
+  - options: Additional options (e.g. { category: "upscale", note: "fast" } for save_space)
+
+Example calls:
+  Create video: { action: "create_video", name: "MyAnimation", prompt: "// Remotion React component" }
+  Render video: { action: "render_video", name: "MyAnimation" }
+  Convert format: { action: "convert_media", source: "input.gif", output: "output.mp4" }
+  Save space: { action: "save_space", name: "stabilityai/stable-diffusion-xl-base-1.0", options: { category: "text-to-image" } }
+
+HF Spaces Setup:
+  1. Go to https://huggingface.co/settings/tokens
+  2. Click "Create new token"
+  3. Select "Read" type (sufficient for all Space operations)
+  4. Name it "handofai" and copy the hf_... key
+  5. Set HF_TOKEN env var or configure via /media > Setup HF Token
+
+  Note: Read tokens only call public Spaces (no repo writes needed). Fine-grained tokens are overkill.
+
+Downloading Web Content:
+  - For downloading video/audio/images from social media (YouTube, Twitter/X, TikTok, Instagram, Reddit, any URL):
+    1. Use websearch tool to find the specific content or URL
+    2. Use typescript tool to write a download script (e.g., fetch with headers, stream to file, or spawn yt-dlp)
+    3. Do NOT create new tools for this — use existing websearch + typescript tools
+    4. Once downloaded, use the local file with media tool actions (convert_media, etc.)
+  - The webfetch tool can fetch page text and images but cannot extract video/audio streams directly
+  - The browser tool can navigate complex JS sites if needed
+
+Registry & Favorites:
+  - The agent maintains a curated registry of top HF Spaces per category
+  - Registry is stored at: ~/.config/handofai/state/media-registry.json
+  - The TypeScript tool can read this registry to find recommended Spaces
+  - Users can create custom categories (e.g. "audio-to-video") via add_category
+  - Registry updates can be manual (default) or automatic (configurable interval)

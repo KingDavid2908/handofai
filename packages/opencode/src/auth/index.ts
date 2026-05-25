@@ -11,6 +11,22 @@ const file = path.join(Global.Path.data, "auth.json")
 
 const fail = (message: string) => (cause: unknown) => new Auth.AuthError({ message, cause })
 
+async function loadHfToken(): Promise<string | undefined> {
+  const configs = ["handofai.jsonc", "handofai.json", "config.json"]
+  for (const name of configs) {
+    try {
+      const raw = await Filesystem.readText(path.join(Global.Path.config, name))
+      const data = JSON.parse(raw) as Record<string, unknown>
+      const media = data.media as Record<string, unknown> | undefined
+      const token = media?.hf_token
+      if (typeof token === "string" && token) return token
+    } catch {
+      // ignore missing / invalid config files
+    }
+  }
+  return undefined
+}
+
 export namespace Auth {
   export class Oauth extends Schema.Class<Oauth>("OAuth")({
     type: Schema.Literal("oauth"),
@@ -59,6 +75,10 @@ export namespace Auth {
         Effect.tryPromise({
           try: async () => {
             const data = await Filesystem.readJson<Record<string, unknown>>(file).catch(() => ({}))
+            if (!process.env.HF_TOKEN) {
+              const hfToken = await loadHfToken()
+              if (hfToken) process.env.HF_TOKEN = hfToken
+            }
             return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
           },
           catch: fail("Failed to read auth data"),
