@@ -11,6 +11,7 @@ import { Installation } from "@/installation"
 import { Log } from "../../util/log"
 import { lazy } from "../../util/lazy"
 import { Config } from "../../config/config"
+import { getSharedEngine } from "../../gateway"
 import { errors } from "../error"
 
 const log = Log.create({ service: "server" })
@@ -307,6 +308,71 @@ export const GlobalRoutes = lazy(() =>
           return c.json(result)
         }
         return c.json(result, 500)
+      },
+    )
+    .get(
+      "/gateway/status",
+      describeRoute({
+        summary: "Get gateway status",
+        description: "Get the current status of the messaging gateway and its platforms.",
+        operationId: "global.gateway.status",
+        responses: {
+          200: {
+            description: "Gateway status information",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({
+                  running: z.boolean(),
+                  platforms: z.record(z.string(), z.boolean()),
+                })),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const engine = getSharedEngine()
+        if (!engine) {
+          return c.json({ running: false, platforms: {} })
+        }
+        return c.json(engine.getStatus())
+      },
+    )
+    .post(
+      "/gateway/send",
+      describeRoute({
+        summary: "Send gateway message",
+        description: "Send a message through a gateway platform.",
+        operationId: "global.gateway.send",
+        responses: {
+          200: {
+            description: "Send result",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({
+                  success: z.boolean(),
+                  id: z.string().optional(),
+                  error: z.string().optional(),
+                })),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", z.object({
+        platform: z.string().meta({ description: "Platform name (e.g., telegram, discord)" }),
+        chat: z.string().meta({ description: "Chat/recipient identifier" }),
+        text: z.string().meta({ description: "Message text" }),
+      })),
+      async (c) => {
+        const engine = getSharedEngine()
+        if (!engine) {
+          return c.json({ success: false, error: "Gateway not running" }, 503)
+        }
+        const { platform, chat, text } = c.req.valid("json")
+        const result = await engine.send(platform, chat, text)
+        return c.json(result)
       },
     ),
 )

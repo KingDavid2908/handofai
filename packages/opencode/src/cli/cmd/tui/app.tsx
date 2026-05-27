@@ -31,6 +31,7 @@ import { DialogModel, useConnected } from "@tui/component/dialog-model"
 import { DialogMoaConfig } from "@tui/component/dialog-moa-config"
 import { DialogVisionModel } from "@tui/component/dialog-vision-model"
 import { DialogMcp } from "@tui/component/dialog-mcp"
+import { DialogGateway } from "@tui/component/dialog-gateway"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
@@ -646,6 +647,17 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         dialog.replace(() => <DialogStatus />)
       },
       category: "System",
+    },
+    {
+      title: "Manage gateway platforms",
+      value: "gateway.list",
+      category: "System",
+      slash: {
+        name: "gateway",
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogGateway />)
+      },
     },
     {
       title: "Switch theme",

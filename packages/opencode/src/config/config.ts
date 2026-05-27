@@ -1191,6 +1191,39 @@ export namespace Config {
         })
         .optional()
         .describe("Media tool configuration for video, image, and audio generation/editing"),
+      gateway: z
+        .object({
+          platforms: z
+            .record(
+              z.string(),
+              z
+                .object({
+                  enabled: z.boolean().default(false),
+                  method: z.string().optional(),
+                  allowed_users: z
+                    .array(z.string())
+                    .optional()
+                    .describe("List of user identifiers allowed (empty = allow all, treated as plan mode)"),
+                  blocked_users: z
+                    .array(z.string())
+                    .optional()
+                    .describe("List of user identifiers blocked"),
+                  user_permissions: z
+                    .record(
+                      z.string(),
+                      z.object({
+                        mode: z.enum(["plan", "build"]).default("plan"),
+                      })
+                    )
+                    .optional()
+                    .describe("Per-user permission overrides"),
+                })
+                .catchall(z.any()),
+            )
+            .optional(),
+        })
+        .optional()
+        .describe("Messaging gateway platform configuration"),
       session_list_scope: z
         .enum(["global", "project"])
         .optional()

@@ -93,6 +93,23 @@ export namespace CronRunner {
 
       if (job.deliver === "local") {
         log.info("cron result (local delivery)", { jobId: job.id, result: text })
+      } else if (job.deliver) {
+        try {
+          const { GatewayEngine } = await import("../gateway")
+          const eng = new GatewayEngine()
+          const deliver = job.deliver
+          if (deliver.includes(":")) {
+            const [platform, chat] = deliver.split(":", 2)
+            const result = await eng.send(platform.trim(), chat.trim(), text)
+            if (result.success) {
+              log.info("cron delivered via gateway", { jobId: job.id, platform, id: result.id })
+            } else {
+              log.warn("cron gateway delivery failed", { jobId: job.id, platform, error: result.error })
+            }
+          }
+        } catch (derr) {
+          log.error("cron gateway delivery failed", { jobId: job.id, error: String(derr) })
+        }
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
