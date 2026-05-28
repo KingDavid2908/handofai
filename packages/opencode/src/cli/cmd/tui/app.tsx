@@ -136,6 +136,7 @@ function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
     useKittyKeyboard: { events: process.platform === "win32" },
     autoFocus: false,
     openConsoleOnError: false,
+    externalOutputMode: "passthrough",
     consoleOptions: {
       keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
       onCopySelection: (text) => {
@@ -260,7 +261,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
-  renderer.disableStdoutInterception()
   const dialog = useDialog()
   const local = useLocal()
   const kv = useKV()

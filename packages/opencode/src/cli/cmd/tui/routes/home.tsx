@@ -2,6 +2,7 @@ import { Prompt, type PromptRef } from "@tui/component/prompt"
 import { createEffect, on, onMount } from "solid-js"
 import { Logo } from "../component/logo"
 import { useSync } from "../context/sync"
+import { useTheme } from "../context/theme"
 import { Toast } from "../ui/toast"
 import { useArgs } from "../context/args"
 import { useRouteData } from "@tui/context/route"
@@ -20,6 +21,7 @@ export function Home() {
   const sync = useSync()
   const route = useRouteData("home")
   const promptRef = usePromptRef()
+  const { theme } = useTheme()
   let prompt: PromptRef | undefined
   const args = useArgs()
   const local = useLocal()
