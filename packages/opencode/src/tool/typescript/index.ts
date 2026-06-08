@@ -826,31 +826,33 @@ function createSandbox(ctx: SandboxContext, logs: string[] = []) {
   let cwd = ctx.cwd
   let installedLibs: string[] = readJsonFile<string[]>(LIBS_FILE, [])
 
-  // Pre-install axios if not already done
   if (!axiosInstance) {
     try {
       const libTempDir = os.tmpdir()
       const axiosDir = path.join(libTempDir, "handofai-libs-axios")
-      
       const axiosPath = path.join(axiosDir, "node_modules", "axios")
       const formDataPath = path.join(axiosDir, "node_modules", "form-data")
-      if (!fs.existsSync(axiosPath) || !fs.existsSync(formDataPath)) {
+      let needsInstall = !fs.existsSync(axiosPath) || !fs.existsSync(formDataPath)
+      if (!needsInstall) {
+        try {
+          require(axiosPath)
+        } catch {
+          needsInstall = true
+        }
+      }
+      if (needsInstall) {
         fs.rmSync(axiosDir, { recursive: true, force: true })
         fs.mkdirSync(axiosDir, { recursive: true })
         fs.writeFileSync(path.join(axiosDir, "package.json"), JSON.stringify({ name: "handofai-libs", dependencies: { axios: "*", "form-data": "*" } }))
-        spawnSync("bun", ["install"], { cwd: axiosDir, encoding: "utf-8" })
+        const result = spawnSync("bun", ["install"], { cwd: axiosDir, encoding: "utf-8" })
+        if (result.status !== 0) throw new Error(result.stderr || "bun install failed")
       }
-      
-      // Now require axios
       const axios = require(axiosPath)
       axiosInstance = axios.create({
         timeout: 30000,
         validateStatus: () => true,
       })
-    } catch (e) {
-      // Axios not available, will use fetch fallback
-      console.error("Failed to pre-install axios:", e)
-    }
+    } catch {}
   }
 
   const abortSignal = ctx.ctx.abort
@@ -1541,7 +1543,6 @@ function createSandbox(ctx: SandboxContext, logs: string[] = []) {
   const api = {
       async call(method: string, url: string, opts?: { headers?: Record<string, string>; body?: string; timeout?: number }): Promise<{ status: number; headers: Record<string, string>; body: string; error?: string }> {
         try {
-          // Use axios if available, otherwise fall back to fetch
           if (axiosInstance) {
             const response = await axiosInstance({
               method: method.toUpperCase(),
@@ -1549,7 +1550,7 @@ function createSandbox(ctx: SandboxContext, logs: string[] = []) {
               headers: { "User-Agent": "handofai-typescript/1.0", ...opts?.headers },
               data: opts?.body,
               timeout: opts?.timeout || 30000,
-              validateStatus: () => true, // Accept all status codes
+              validateStatus: () => true,
             })
             const headers: Record<string, string> = {}
             if (response.headers) {
@@ -1560,16 +1561,14 @@ function createSandbox(ctx: SandboxContext, logs: string[] = []) {
             }
             return { status: response.status, headers, body: typeof response.data === "string" ? response.data : JSON.stringify(response.data) }
           }
-          // Fallback to fetch
-          const request = new Request(url, {
+          const response = await fetch(url, {
             method: method.toUpperCase(),
             headers: { "User-Agent": "handofai-typescript/1.0", ...opts?.headers },
             body: opts?.body,
           })
-          const response = await fetch(request)
           const body = await response.text()
           const headers: Record<string, string> = {}
-          response.headers.forEach((v: string, k: string) => { headers[k] = v })
+          response.headers.forEach((v, k) => { headers[k] = v })
           return { status: response.status, headers, body }
         } catch (e) {
           const errMsg = e instanceof Error ? e.message : String(e)

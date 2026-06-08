@@ -1,4 +1,6 @@
 import { render, TimeToFirstDraw, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { Config } from "@/config/config"
+import { reconcile } from "solid-js/store"
 import { Clipboard } from "@tui/util/clipboard"
 import { Selection } from "@tui/util/selection"
 import { createCliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
@@ -43,6 +45,8 @@ import { KeybindProvider, useKeybind } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
+import { VoiceProvider, useVoice } from "./context/voice"
+import { VoiceParticipant } from "@/voice/rtc-participant"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -227,6 +231,7 @@ export function tui(input: {
                             <LocalProvider>
                               <KeybindProvider>
                                 <PromptStashProvider>
+                                  <VoiceProvider>
                                   <DialogProvider>
                                     <CommandProvider>
                                       <FrecencyProvider>
@@ -238,6 +243,7 @@ export function tui(input: {
                                       </FrecencyProvider>
                                     </CommandProvider>
                                   </DialogProvider>
+                                  </VoiceProvider>
                                 </PromptStashProvider>
                               </KeybindProvider>
                             </LocalProvider>
@@ -307,9 +313,79 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       setReady(true)
     })
 
+  // Voice mode toggle (works on all screens including home/new-session)
+  useKeyboard((evt) => {
+    if (dialog.stack.length > 0) return
+    if (keybind.match("voice_toggle", evt)) {
+      evt.preventDefault()
+      const vc = (sync.data.config as any).voice
+      const current = vc?.mode || "off"
+      const next = current === "off" ? "stt_only" : "off"
+      const label = next === "off" ? "Voice: OFF" : "Voice: ON"
+      Config.updateGlobal({ voice: { ...(vc || {}), mode: next } })
+        .then((updated) => {
+          sync.set("config", reconcile(updated))
+        })
+        .catch((err) => {
+          toast.show({ message: `Voice toggle failed: ${err.message}`, variant: "error", duration: 3000 })
+        })
+      toast.show({ message: label, variant: "info", duration: 2000 })
+    }
+  })
+
+  // -- Voice participant management (works on ALL routes including home) --
+  const voice = useVoice()
+  let voiceParticipant: VoiceParticipant | null = null
+  let voiceGen = 0
+  let prevVoiceMode = "off"
+
+  const voiceMode = createMemo(() => (sync.data.config as any).voice?.mode || "off")
+
+  createEffect(() => {
+    const mode = voiceMode()
+    if (mode === prevVoiceMode) return
+    prevVoiceMode = mode
+    const vc = (sync.data.config as any).voice
+
+    if (mode === "off") {
+      voiceGen++
+      voiceParticipant?.disconnect()
+      voiceParticipant = null
+      voice.setActive(false)
+      dialog.clear()
+      return
+    }
+
+    if (mode === "stt_only") {
+      voiceParticipant?.disconnect()
+      voiceParticipant = new VoiceParticipant()
+      const gen = ++voiceGen
+      voice.setActive(true)
+      dialog.clear()
+      voiceParticipant.connectSttOnly(vc, {
+        onTranscript: (text, isFinal) => {
+          if (gen !== voiceGen) return
+          promptRef.current?.set?.({ input: text, parts: [] })
+        },
+        onUserSpeaking: () => { if (gen !== voiceGen) return },
+        onError: (msg) => {
+          if (gen !== voiceGen) return
+          voice.setActive(false)
+          toast.show({ message: msg, variant: "error", duration: 3000 })
+        },
+      }).catch((err) => {
+        if (gen !== voiceGen) return
+        voice.setActive(false)
+        toast.show({ message: `Voice connection failed: ${err.message}`, variant: "error", duration: 3000 })
+        voiceParticipant = null
+      })
+    }
+  })
+
   useKeyboard((evt) => {
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
-    if (!renderer.getSelection()) return
+    const sel = renderer.getSelection()
+    if (!sel) return
 
     // Windows Terminal-like behavior:
     // - Ctrl+C copies and dismisses selection
@@ -330,6 +406,11 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       renderer.clearSelection()
       evt.preventDefault()
       evt.stopPropagation()
+      return
+    }
+
+    const focus = renderer.currentFocusedRenderable
+    if (focus?.hasSelection() && sel.selectedRenderables.includes(focus)) {
       return
     }
 
@@ -921,14 +1002,14 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         <TimeToFirstDraw />
       </Show>
       <Show when={ready()}>
-        <Switch>
-          <Match when={route.data.type === "home"}>
-            <Home />
-          </Match>
-          <Match when={route.data.type === "session"}>
-            <Session />
-          </Match>
-        </Switch>
+          <Switch>
+            <Match when={route.data.type === "home"}>
+              <Home />
+            </Match>
+            <Match when={route.data.type === "session"}>
+              <Session />
+            </Match>
+          </Switch>
       </Show>
       {plugin()}
       <TuiPluginRuntime.Slot name="app" />

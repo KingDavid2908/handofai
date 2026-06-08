@@ -351,13 +351,25 @@ export namespace SessionPrompt {
         })
       }
 
-      // Image/video/audio attachment detection: inject file path for vision tool
-      const mediaParts = msgs
+      // Image/video/audio attachment detection: inject prompts for vision and voice tools
+      const allMediaParts = msgs
         .filter((m) => m.info.role === "user" && m.info.id === lastUser.id)
         .flatMap((m) => m.parts)
         .filter((p) => p.type === "file" && typeof (p as any).mime === "string" && ((p as any).mime.startsWith("image/") || (p as any).mime.startsWith("video/") || (p as any).mime.startsWith("audio/")))
       const placeholders = new Set(["clipboard", "image", "video", "audio", "paste"])
-      for (const part of mediaParts) {
+
+      // Separate visual (image/video) from audio-only attachments
+      const visualParts = allMediaParts.filter((p) => {
+        const mime = (p as any).mime as string
+        return mime.startsWith("image/") || mime.startsWith("video/")
+      })
+      const audioParts = allMediaParts.filter((p) => {
+        const mime = (p as any).mime as string
+        return mime.startsWith("audio/")
+      })
+
+      // Inject vision tool prompt for visual attachments
+      for (const part of visualParts) {
         const sourcePath = (part as any).source?.path as string | undefined
         const url = (part as any).url as string | undefined
         let source = ""
@@ -375,6 +387,29 @@ export namespace SessionPrompt {
           text: source
             ? `[VISUAL CONTENT DETECTED]\nThe user has attached an image or video. Call the vision tool to analyze it with source="${source}"\nThe vision tool uses a dedicated vision model and works regardless of the current model's capabilities.`
             : `[VISUAL CONTENT DETECTED]\nThe user has attached an image or video. Use the vision tool to analyze it — call vision with no source to auto-detect the most recent attachment. The vision tool uses a dedicated vision model and works regardless of the current model's capabilities.`,
+          synthetic: true,
+        })
+      }
+
+      // Inject voice tool prompt for audio attachments
+      for (const part of audioParts) {
+        const sourcePath = (part as any).source?.path as string | undefined
+        const url = (part as any).url as string | undefined
+        let source = ""
+        if (sourcePath && typeof sourcePath === "string" && !placeholders.has(sourcePath) && !sourcePath.startsWith("data:")) {
+          source = sourcePath
+        } else if (url && !url.startsWith("data:")) {
+          source = url
+        }
+
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: lastUser.id,
+          sessionID,
+          type: "text",
+          text: source
+            ? `[AUDIO CONTENT DETECTED]\nThe user has sent an audio message or voice note. Call the voice tool to transcribe it with source="${source}"\nThe voice tool uses LiveKit inference models configured in /voice.`
+            : `[AUDIO CONTENT DETECTED]\nThe user has sent an audio message or voice note. Call the voice tool to transcribe it — call voice with no source to auto-detect the most recent attachment. The voice tool uses LiveKit inference models configured in /voice.`,
           synthetic: true,
         })
       }
@@ -987,7 +1022,7 @@ export namespace SessionPrompt {
       // Check if this is a custom tool from the tool/ directory (not a built-in)
       const isBuiltin = [
         "bash", "browser", "websearch", "webfetch", "read", "write", "edit", "grep", "glob", "task",
-        "memory", "vision", "skill", "todo", "codesearch", "session_search", "lesson", "skills_list",
+        "memory", "vision", "voice", "skill", "todo", "codesearch", "session_search", "lesson", "skills_list",
         "skill_manage", "moa", "cronjob", "apply_patch", "question", "process", "shell", "filesystem",
         "list", "multiedit", "webfetch", "plan_enter", "plan_exit", "discover", "plugin", "typescript",
         "batch", "connector", "lsp", "truncate", "skills_list", "skill_manage",

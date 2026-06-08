@@ -73,22 +73,26 @@ export namespace FileTime {
         return next
       })
 
+      const norm = (p: string) => process.platform === "win32" ? Filesystem.normalizePath(p) : p
+
       const read = Effect.fn("FileTime.read")(function* (sessionID: SessionID, file: string) {
         const reads = (yield* InstanceState.get(state)).reads
-        log.info("read", { sessionID, file })
-        session(reads, sessionID).set(file, yield* stamp(file))
+        const n = norm(file)
+        log.info("read", { sessionID, file: n })
+        session(reads, sessionID).set(n, yield* stamp(file))
       })
 
       const get = Effect.fn("FileTime.get")(function* (sessionID: SessionID, file: string) {
         const reads = (yield* InstanceState.get(state)).reads
-        return reads.get(sessionID)?.get(file)?.read
+        return reads.get(sessionID)?.get(norm(file))?.read
       })
 
       const assert = Effect.fn("FileTime.assert")(function* (sessionID: SessionID, filepath: string) {
         if (disableCheck) return
 
         const reads = (yield* InstanceState.get(state)).reads
-        const time = reads.get(sessionID)?.get(filepath)
+        const n = norm(filepath)
+        const time = reads.get(sessionID)?.get(n)
         if (!time) throw new Error(`You must read file ${filepath} before overwriting it. Use the Read tool first`)
 
         const next = yield* stamp(filepath)

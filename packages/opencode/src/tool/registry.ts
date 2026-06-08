@@ -21,6 +21,7 @@ import { ProcessTool } from "./process"
 import { DiscoverTool } from "./discover"
 import { MixtureOfAgentsTool } from "./mixture-of-agents"
 import { VisionTool } from "./vision"
+import { VoiceTool } from "./voice"
 import { CronjobTool } from "./cronjob"
 import { BrowserTool } from "./browser"
 import type { Agent } from "../agent/agent"
@@ -151,6 +152,7 @@ export namespace ToolRegistry {
           SkillManageTool,
           ProcessTool,
           VisionTool,
+          VoiceTool,
           MixtureOfAgentsTool,
           CronjobTool,
           BrowserTool,

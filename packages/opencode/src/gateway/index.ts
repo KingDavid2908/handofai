@@ -1,7 +1,7 @@
 import { Config } from "../config/config"
 import { Auth } from "../auth"
 import { Log } from "../util/log"
-import type { Handler, PlatformAdapter, SendOpts, SendResult } from "./adapter"
+import type { Handler, PlatformAdapter, SendOpts, SendResult, Msg, MediaItem } from "./adapter"
 import { TelegramAdapter } from "./platforms/telegram"
 import { DiscordAdapter } from "./platforms/discord"
 import { WhatsAppBaileysAdapter } from "./platforms/whatsapp-baileys"
@@ -61,11 +61,79 @@ export class GatewayEngine {
   private adapters = new Map<string, PlatformAdapter>()
   private handler?: Handler
   private running = false
+  private cleanupTimer?: ReturnType<typeof setInterval>
+  private batchBuffers = new Map<string, { msgs: Msg[]; timer: ReturnType<typeof setTimeout> }>()
+
+  private createBatchedHandler(handler: Handler): Handler {
+    return (msg: Msg) => {
+      const key = `${msg.platform}:${msg.chat}`
+      const buf = this.batchBuffers.get(key)
+      if (buf) {
+        buf.msgs.push(msg)
+        clearTimeout(buf.timer)
+      } else {
+        this.batchBuffers.set(key, { msgs: [msg], timer: undefined! })
+      }
+
+      const entry = this.batchBuffers.get(key)!
+      entry.timer = setTimeout(() => {
+        this.flushBatch(key, handler)
+      }, 3000)
+    }
+  }
+
+  private flushBatch(key: string, handler: Handler) {
+    const buf = this.batchBuffers.get(key)
+    if (!buf || buf.msgs.length === 0) {
+      this.batchBuffers.delete(key)
+      return
+    }
+    this.batchBuffers.delete(key)
+
+    if (buf.msgs.length === 1) {
+      handler(buf.msgs[0])
+      return
+    }
+
+    const merged = this.mergeBatch(buf.msgs)
+    log.info("batched messages", { platform: merged.platform, chat: merged.chat, count: buf.msgs.length })
+    handler(merged)
+  }
+
+  private mergeBatch(msgs: Msg[]): Msg {
+    const first = msgs[0]
+    const texts: string[] = []
+    const media: MediaItem[] = []
+
+    for (const m of msgs) {
+      if (m.text) texts.push(m.text)
+      if (m.media?.length) media.push(...m.media)
+    }
+
+    return {
+      ...first,
+      text: texts.join("\n"),
+      media: media.length > 0 ? media : undefined,
+    }
+  }
 
   async start(handler: Handler): Promise<void> {
     if (this.running) return
     this.running = true
     this.handler = handler
+
+    const batchedHandler = this.createBatchedHandler(handler)
+
+    const [{ cleanup }] = await Promise.all([
+      import("./cache"),
+    ])
+
+    this.cleanupTimer = setInterval(() => {
+      cleanup(24).catch((err: unknown) => {
+        log.error("cache cleanup failed", { error: String(err) })
+      })
+    }, 6 * 3600000)
+    cleanup(24).catch(() => {})
 
     const cfg = await Config.getGlobal()
     const platforms = ((cfg as any).gateway?.platforms ?? {}) as Record<string, { enabled: boolean; method?: string }>
@@ -100,7 +168,7 @@ export class GatewayEngine {
 
       try {
         const adapter = factory(key, pcfg as any)
-        await adapter.start(handler)
+        await adapter.start(batchedHandler)
         this.adapters.set(name, adapter)
         log.info("platform started", { platform: name })
       } catch (err) {
@@ -113,6 +181,14 @@ export class GatewayEngine {
 
   async stop(): Promise<void> {
     this.running = false
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer)
+      this.cleanupTimer = undefined
+    }
+    for (const [, buf] of this.batchBuffers) {
+      clearTimeout(buf.timer)
+    }
+    this.batchBuffers.clear()
     for (const [name, adapter] of this.adapters) {
       try {
         await adapter.stop()

@@ -78,4 +78,20 @@ export class SmsAdapter implements PlatformAdapter {
       return { success: false, error: e.message }
     }
   }
+
+  async sendImage(chat: string, filePath: string, caption?: string): Promise<SendResult> {
+    return { success: false, error: "SMS does not support media" }
+  }
+
+  async sendVideo(chat: string, filePath: string, caption?: string): Promise<SendResult> {
+    return { success: false, error: "SMS does not support media" }
+  }
+
+  async sendVoice(chat: string, filePath: string): Promise<SendResult> {
+    return { success: false, error: "SMS does not support media" }
+  }
+
+  async sendDocument(chat: string, filePath: string, filename?: string): Promise<SendResult> {
+    return { success: false, error: "SMS does not support media" }
+  }
 }

@@ -1,5 +1,6 @@
 import path from "path"
 import { mkdir, readdir, stat as fsStat, rm } from "fs/promises"
+import { readFileSync, existsSync, statSync } from "fs"
 import { Global } from "../global"
 
 const base = path.join(Global.Path.state, "gateway", "cache")
@@ -111,3 +112,84 @@ export async function cleanup(maxAgeHours = 24): Promise<number> {
 }
 
 export const CACHE_PATHS = dirs
+
+export const IMAGE_EXTS = new Set([
+  ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".svg",
+])
+
+export const VIDEO_EXTS = new Set([
+  ".mp4", ".mov", ".avi", ".mkv", ".webm", ".3gp",
+])
+
+export const AUDIO_EXTS = new Set([
+  ".ogg", ".opus", ".mp3", ".wav", ".m4a", ".flac",
+])
+
+export const DOC_EXTS = new Set([
+  ".pdf", ".docx", ".doc", ".odt", ".rtf", ".txt", ".md",
+  ".xlsx", ".xls", ".ods", ".csv", ".json", ".xml", ".yaml", ".yml",
+  ".pptx", ".ppt", ".odp",
+  ".zip", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".7z", ".rar",
+  ".html", ".htm", ".epub",
+])
+
+export const MEDIA_EXTS: Record<string, string> = {
+  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+  ".webp": "image/webp", ".gif": "image/gif", ".bmp": "image/bmp",
+  ".tiff": "image/tiff", ".svg": "image/svg+xml",
+  ".mp4": "video/mp4", ".mov": "video/quicktime", ".avi": "video/x-msvideo",
+  ".mkv": "video/x-matroska", ".webm": "video/webm", ".3gp": "video/3gpp",
+  ".ogg": "audio/ogg", ".opus": "audio/opus", ".mp3": "audio/mpeg",
+  ".wav": "audio/wav", ".m4a": "audio/mp4", ".flac": "audio/flac",
+  ".pdf": "application/pdf",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".zip": "application/zip", ".rar": "application/vnd.rar",
+  ".7z": "application/x-7z-compressed", ".tar": "application/x-tar",
+  ".gz": "application/gzip", ".epub": "application/epub+zip",
+}
+
+export const TEXT_INJECTABLE_EXTS = new Set([
+  ".md", ".txt", ".csv", ".json", ".yaml", ".yml", ".xml", ".toml",
+  ".ini", ".cfg", ".log", ".ts", ".py", ".sh", ".js", ".html", ".css",
+])
+
+const PRIVATE_IP_PATTERNS = [
+  /^10\./,
+  /^172\.(1[6-9]|2[0-9]|3[01])\./,
+  /^192\.168\./,
+  /^127\./,
+  /^169\.254\./,
+  /^::1$/,
+  /^fe80:/i,
+  /^fc00:/,
+  /^fd00:/,
+]
+
+export function isSafeUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw)
+    const host = url.hostname.toLowerCase()
+    if (host === "localhost" || host === "metadata.google.internal") return false
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function validateMediaPath(filepath: string): boolean {
+  const resolved = path.resolve(filepath)
+  return resolved.startsWith(base) && !resolved.includes("..")
+}
+
+export function readTextContent(filepath: string, maxBytes = 100_000): string | null {
+  if (!existsSync(filepath)) return null
+  const ext = path.extname(filepath).toLowerCase()
+  if (!TEXT_INJECTABLE_EXTS.has(ext)) return null
+  const st = statSync(filepath)
+  if (st.size > maxBytes) return null
+  const content = readFileSync(filepath, "utf-8")
+  const name = path.basename(filepath)
+  return `[Content of ${name}]:\n${content}`
+}

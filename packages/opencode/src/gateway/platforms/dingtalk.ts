@@ -80,4 +80,20 @@ export class DingTalkAdapter implements PlatformAdapter {
       return { success: false, error: e.message }
     }
   }
+
+  async sendImage(chat: string, filePath: string, caption?: string): Promise<SendResult> {
+    return this.sendMedia(chat, filePath, { caption })
+  }
+
+  async sendVideo(chat: string, filePath: string, caption?: string): Promise<SendResult> {
+    return this.sendMedia(chat, filePath, { caption })
+  }
+
+  async sendVoice(chat: string, filePath: string): Promise<SendResult> {
+    return this.sendMedia(chat, filePath)
+  }
+
+  async sendDocument(chat: string, filePath: string, filename?: string): Promise<SendResult> {
+    return this.sendMedia(chat, filePath)
+  }
 }

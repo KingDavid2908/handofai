@@ -816,6 +816,7 @@ export namespace Config {
       tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
       plugin_manager: z.string().optional().default("none").describe("Open plugin manager dialog"),
       display_thinking: z.string().optional().default("none").describe("Toggle thinking blocks visibility"),
+      voice_toggle: z.string().optional().default("ctrl+n").describe("Toggle voice (off / stt-only)"),
     })
     .strict()
     .meta({
@@ -1228,6 +1229,51 @@ export namespace Config {
         .enum(["global", "project"])
         .optional()
         .describe("Default scope for /sessions: global (all projects) or project (current project only)"),
+      voice: z
+        .object({
+          mode: z.enum(["off", "stt_only"]).default("off"),
+          keybind: z.string().default("ctrl+n"),
+          stt: z
+            .object({
+              model: z.string().default("deepgram/nova-3"),
+              language: z.string().default("multi"),
+            })
+            .optional(),
+          tts: z
+            .object({
+              model: z.string().default("cartesia/sonic-3"),
+              voice: z.string().default("9626c31c-bec5-4cca-baa8-f8ba9e84c8bc"),
+            })
+            .optional(),
+          llm: z
+            .object({
+              use_active_model: z.boolean().default(true),
+              model: z.string().optional(),
+            })
+            .optional(),
+          livekit: z
+            .object({
+              url: z.string().optional(),
+              api_key: z.string().optional(),
+              api_secret: z.string().optional(),
+            })
+            .optional(),
+          provider_keys: z.record(z.string(), z.any()).optional(),
+          instructions: z.string().optional(),
+          sox_device: z.string().optional().default("0")
+            .describe("SoX waveaudio device index (Windows)"),
+          ffmpeg_device: z.string().optional()
+            .describe("FFmpeg dshow audio device name (Windows)"),
+        })
+        .optional()
+        .describe("Voice agent configuration for STT/TTS, LiveKit credentials, and voice mode settings"),
+      voice_call: z
+        .object({
+          your_number: z.string().optional(),
+          providers: z.record(z.string(), z.object({ enabled: z.boolean().default(false) }).catchall(z.any())).optional(),
+        })
+        .optional()
+        .describe("Phone calling provider configuration for voice calls"),
       lessons: z
         .object({
           enabled: z.boolean().default(true).describe("Enable lessons injection into system prompt (default: true). Tool and writing are always available."),
@@ -1705,7 +1751,7 @@ export namespace Config {
             yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
           }
 
-          yield* invalidate()
+          yield* invalidate(true)
           return next
         })
 

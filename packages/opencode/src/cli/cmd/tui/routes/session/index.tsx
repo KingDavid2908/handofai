@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onCleanup,
   onMount,
   Show,
   Switch,
@@ -81,6 +82,7 @@ import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
 import { DialogMemory } from "../../component/dialog-memory"
+import { useVoice } from "../../context/voice"
 import { getWorkingDirectory } from "@/util/working-directory"
 
 addDefaultParsers(parsers.parsers)
@@ -267,6 +269,9 @@ export function Session() {
       exit()
     }
   })
+
+  const voiceMode = createMemo(() => (sync.data.config as any).voice?.mode || "off")
+  const { active: voiceActive } = useVoice()
 
   // Helper: Find next visible message boundary in direction
   const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
@@ -1181,6 +1186,7 @@ export function Session() {
                   toBottom()
                 }}
                 sessionID={route.sessionID}
+                voiceActive={voiceActive()}
               />
             </box>
           </Show>
@@ -2154,7 +2160,7 @@ function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
         <BlockTool title="# Todos" part={props.part}>
           <box>
             <For each={props.input.todos ?? []}>
-              {(todo) => <TodoItem status={todo.status} content={todo.content} />}
+              {(todo) => <TodoItem status={todo.status ?? "pending"} content={todo.content ?? ""} />}
             </For>
           </box>
         </BlockTool>

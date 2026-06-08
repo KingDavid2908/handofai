@@ -14,6 +14,18 @@ export interface SendResult {
   error?: string
 }
 
+export type MediaType = "photo" | "video" | "audio" | "voice" | "document" | "sticker"
+
+export interface MediaItem {
+  type: MediaType
+  mime: string
+  url?: string
+  path?: string
+  filename?: string
+  size?: number
+  caption?: string
+}
+
 export interface Msg {
   text: string
   platform: string
@@ -21,7 +33,7 @@ export interface Msg {
   type: "dm" | "group" | "channel"
   user?: string
   msgId?: string
-  media?: { url: string; type: string }[]
+  media?: MediaItem[]
   reply?: string
   replyText?: string
 }
@@ -36,6 +48,11 @@ export interface PlatformAdapter {
   sendMedia(chat: string, path: string, opts?: SendMediaOpts): Promise<SendResult>
   isRunning(): boolean
   sendTyping?(chat: string): Promise<void>
+  sendImage?(chat: string, path: string, caption?: string): Promise<SendResult>
+  sendVideo?(chat: string, path: string, caption?: string): Promise<SendResult>
+  sendVoice?(chat: string, path: string): Promise<SendResult>
+  sendDocument?(chat: string, path: string, filename?: string): Promise<SendResult>
+  sendAlbum?(chat: string, paths: string[], caption?: string): Promise<SendResult>
 }
 
 export function chunkText(text: string, limit: number): string[] {

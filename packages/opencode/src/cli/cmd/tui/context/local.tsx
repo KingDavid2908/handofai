@@ -139,6 +139,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }
         state.pending = false
         Filesystem.writeJson(filePath, {
+          model: modelStore.model,
           recent: modelStore.recent,
           favorite: modelStore.favorite,
           variant: modelStore.variant,
@@ -150,6 +151,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       Filesystem.readJson(filePath)
         .then((x: any) => {
+          if (x.model && typeof x.model === "object" && !Array.isArray(x.model)) setModelStore("model", x.model)
           if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
           if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
           if (typeof x.variant === "object" && x.variant !== null) setModelStore("variant", x.variant)
@@ -182,12 +184,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               providerID,
               modelID,
             }
-          }
-        }
-
-        for (const item of modelStore.recent) {
-          if (isModelValid(item)) {
-            return item
           }
         }
 
@@ -433,6 +429,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }
       },
     }
+
+
 
     // Automatically update model when agent changes
     createEffect(() => {

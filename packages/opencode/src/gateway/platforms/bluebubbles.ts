@@ -83,4 +83,20 @@ export class BlueBubblesAdapter implements PlatformAdapter {
       return { success: false, error: e.message }
     }
   }
+
+  async sendImage(chat: string, filePath: string, _caption?: string): Promise<SendResult> {
+    return this.sendMedia(chat, filePath)
+  }
+
+  async sendVideo(chat: string, filePath: string, _caption?: string): Promise<SendResult> {
+    return this.sendMedia(chat, filePath)
+  }
+
+  async sendVoice(chat: string, filePath: string): Promise<SendResult> {
+    return this.sendMedia(chat, filePath)
+  }
+
+  async sendDocument(chat: string, filePath: string, _filename?: string): Promise<SendResult> {
+    return this.sendMedia(chat, filePath)
+  }
 }

@@ -9,6 +9,7 @@ import { useRouteData } from "@tui/context/route"
 import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { TuiPluginRuntime } from "../plugin"
+import { useVoice } from "../context/voice"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -25,6 +26,7 @@ export function Home() {
   let prompt: PromptRef | undefined
   const args = useArgs()
   const local = useLocal()
+  const { active: voiceActive } = useVoice()
   onMount(() => {
     if (once) return
     if (!prompt) return
@@ -71,6 +73,7 @@ export function Home() {
               }}
               workspaceID={route.workspaceID}
               placeholders={placeholder}
+              voiceActive={voiceActive()}
             />
           </TuiPluginRuntime.Slot>
         </box>

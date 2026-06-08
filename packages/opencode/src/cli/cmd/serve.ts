@@ -7,6 +7,7 @@ import { Instance } from "../../project/instance"
 import { InstanceBootstrap } from "../../project/bootstrap"
 import * as GatewayUser from "../../gateway/user"
 import type { Msg } from "../../gateway/adapter"
+import { enrichMessageWithMedia, deliverMediaFromResponse } from "../../gateway/enrich"
 
 async function handleGatewayMessage(
   msg: Msg,
@@ -41,18 +42,22 @@ async function handleGatewayMessage(
   }
 
   const contextPrefix = `[Message from ${msg.platform} user ${msg.user || msg.chat} in ${msg.type} chat]`
+
+  const { text: enrichedText, attach } = await enrichMessageWithMedia(msg)
+
   const parts: any[] = []
-  if (msg.media?.length) {
-    for (const m of msg.media) {
+  for (const m of attach) {
+    const p = m.path || m.url
+    if (p) {
       parts.push({
         type: "file",
-        url: `file://${m.url}`,
-        mime: m.type === "image" ? "image/jpeg" : "application/octet-stream",
-        filename: m.url.split("/").pop() || "file",
+        url: p.startsWith("http") ? p : `file://${p}`,
+        mime: m.mime,
+        filename: m.filename || p.split("/").pop() || "file",
       })
     }
   }
-  parts.push({ type: "text", text: `${contextPrefix}\n\n${msg.text}` })
+  parts.push({ type: "text", text: `${contextPrefix}\n\n${enrichedText}` })
 
   const result = await SessionPrompt.prompt({
     sessionID,
@@ -107,7 +112,8 @@ export const ServeCommand = cmd({
               async fn() {
                 const responseText = await handleGatewayMessage(msg, sessionMap, cfg)
                 if (responseText) {
-                  await eng.send(msg.platform, msg.chat, responseText, { reply: msg.msgId })
+                  const cleaned = await deliverMediaFromResponse(responseText, msg.chat, eng, msg.platform)
+                  await eng.send(msg.platform, msg.chat, cleaned, { reply: msg.msgId })
                 }
               },
             })

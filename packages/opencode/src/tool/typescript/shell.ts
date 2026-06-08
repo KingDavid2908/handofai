@@ -60,7 +60,7 @@ export const glob = (pattern: string): string[] => {
 
 export const find = (dir: string, opts?: { name?: string; type?: "f" | "d" }): string[] => {
   const target = path.isAbsolute(dir) ? dir : path.resolve(process.cwd(), dir)
-  let results = shell.find(target)
+  let results = shell.find(target) as string[]
 
   if (opts?.name) {
     const regex = new RegExp(opts.name.replace(/\*/g, ".*"))
@@ -138,7 +138,7 @@ export const chmod = (mode: string, file: string): string => {
 
 export const env = (key?: string): string | Record<string, string> | undefined => {
   if (key) return process.env[key]
-  return process.env
+  return process.env as Record<string, string>
 }
 
 export const setEnv = (key: string, value: string): void => {
@@ -236,7 +236,7 @@ export const normalizePath = (p: string, cwd: string): string => {
 }
 
 export const test = (op: "e" | "f" | "d" | "r" | "w" | "x", path: string): boolean => {
-  return shell.test(op, path)
+  return shell.test(op as any, path)
 }
 
 export const pushd = (dir: string): string => {

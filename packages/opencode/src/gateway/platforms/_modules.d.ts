@@ -45,3 +45,13 @@ declare module "nodemailer" {
 declare module "socket.io-client" {
   export const io: any
 }
+
+declare module "sound-play" {
+  const play: (path: string, volume?: number) => Promise<void>
+  export default play
+}
+
+declare module "node-microphone" {
+  const Microphone: any
+  export default Microphone
+}

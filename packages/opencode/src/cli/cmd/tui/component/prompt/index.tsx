@@ -15,6 +15,7 @@ import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { assign } from "./part"
+import { computePromptTraits } from "./traits"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -41,6 +42,8 @@ import { DialogLessons } from "../dialog-lessons"
 import { DialogBrowser } from "../dialog-browser"
 import { DialogWebProvider } from "../dialog-web-provider"
 import { DialogMedia } from "../dialog-media"
+import { DialogVoice } from "../dialog-voice"
+import { DialogVoiceCall } from "../dialog-voice-call"
 
 export type PromptProps = {
   sessionID?: string
@@ -55,6 +58,7 @@ export type PromptProps = {
     normal?: string[]
     shell?: string[]
   }
+  voiceActive?: boolean
 }
 
 export type PromptRef = {
@@ -132,6 +136,15 @@ export function Prompt(props: PromptProps) {
   createEffect(() => {
     if (props.disabled) input.cursorColor = theme.backgroundElement
     if (!props.disabled) input.cursorColor = theme.text
+  })
+
+  createEffect(() => {
+    if (!input || input.isDestroyed) return
+    input.traits = computePromptTraits({
+      mode: store.mode,
+      disabled: !!props.disabled,
+      autocompleteVisible: !!autocomplete?.visible,
+    })
   })
 
   const lastUserMessage = createMemo(() => {
@@ -426,6 +439,7 @@ export function Prompt(props: PromptProps) {
       setStore("prompt", prompt)
       restoreExtmarksFromParts(prompt.parts)
       input.gotoBufferEnd()
+      renderer.requestRender()
     },
     reset() {
       input.clear()
@@ -582,6 +596,24 @@ export function Prompt(props: PromptProps) {
       },
     },
     {
+      title: "Voice",
+      value: "voice",
+      category: "Voice",
+      slash: { name: "voice" },
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogVoice />)
+      },
+    },
+    {
+      title: "Voice Call",
+      value: "voice-call",
+      category: "Voice",
+      slash: { name: "voice-call" },
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogVoiceCall />)
+      },
+    },
+    {
       title: "Stash prompt",
       value: "prompt.stash",
       category: "Prompt",
@@ -657,8 +689,6 @@ export function Prompt(props: PromptProps) {
       })
 
       if (res.error) {
-        console.log("Creating a session failed:", res.error)
-
         toast.show({
           message: "Creating a session failed. Open console for more details.",
           variant: "error",
@@ -738,6 +768,27 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
+      const voiceMode = (sync.data.config as any).voice?.mode
+      const voiceReminder = voiceMode === "stt_only"
+        ? "[System: Voice mode active — user is speaking via microphone, STT transcribed]"
+        : null
+
+      const parts: any[] = []
+      if (voiceReminder) {
+        parts.push({
+          id: PartID.ascending(),
+          type: "text",
+          text: voiceReminder,
+          synthetic: true,
+        })
+      }
+      parts.push({
+        id: PartID.ascending(),
+        type: "text",
+        text: inputText,
+      })
+      parts.push(...nonTextParts.map(assign))
+
       sdk.client.session
         .prompt({
           sessionID,
@@ -746,14 +797,7 @@ export function Prompt(props: PromptProps) {
           agent: local.agent.current().name,
           model: selectedModel,
           variant,
-          parts: [
-            {
-              id: PartID.ascending(),
-              type: "text",
-              text: inputText,
-            },
-            ...nonTextParts.map(assign),
-          ],
+          parts,
         })
         .catch(() => {})
     }
@@ -815,7 +859,11 @@ export function Prompt(props: PromptProps) {
     )
   }
 
+  let lastImagePaste = 0
   async function pasteImage(file: { filename?: string; filepath?: string; content: string; mime: string }) {
+    const now = Date.now()
+    if (now - lastImagePaste < 100) return
+    lastImagePaste = now
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
     const count = store.prompt.parts.filter((x) => x.type === "file" && x.mime.startsWith("image/")).length
@@ -844,7 +892,7 @@ export function Prompt(props: PromptProps) {
     const part: Omit<FilePart, "id" | "messageID" | "sessionID"> = {
       type: "file" as const,
       mime: file.mime,
-      filename: file.filename,
+      filename: filepath ?? file.filename ?? "",
       url: `data:${file.mime};base64,${file.content}`,
       source: {
         type: "file",
@@ -1066,73 +1114,54 @@ export function Prompt(props: PromptProps) {
                   return
                 }
 
-                // Normalize line endings at the boundary
-                // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
-                // Replace CRLF first, then any remaining CR
                 const normalizedText = decodePasteBytes(event.bytes).replace(/\r\n/g, "\n").replace(/\r/g, "\n")
                 const pastedContent = normalizedText.trim()
 
-                // Windows Terminal <1.25 can surface image-only clipboard as an
-                // empty bracketed paste. Windows Terminal 1.25+ does not.
                 if (!pastedContent) {
                   command.trigger("prompt.paste")
                   return
                 }
 
-                // Once we cross an async boundary below, the terminal may perform its
-                // default paste unless we suppress it first and handle insertion ourselves.
                 event.preventDefault()
 
-                // trim ' from the beginning and end of the pasted content. just
-                // ' and nothing else
+                let handled = false
                 const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
                 const isUrl = /^(https?):\/\//.test(filepath)
                 if (!isUrl) {
                   try {
                     const mime = await Filesystem.mimeType(filepath)
                     const filename = path.basename(filepath)
-                    // Handle SVG as raw text content, not as base64 image
                     if (mime === "image/svg+xml") {
-                      event.preventDefault()
                       const content = await Filesystem.readText(filepath).catch(() => {})
                       if (content) {
                         pasteText(content, `[SVG: ${filename ?? "image"}]`)
-                        return
+                        handled = true
                       }
-                    }
-                    if (mime.startsWith("image/")) {
-                      event.preventDefault()
+                    } else if (mime.startsWith("image/")) {
                       const content = await Filesystem.readArrayBuffer(filepath)
                         .then((buffer) => Buffer.from(buffer).toString("base64"))
                         .catch(() => {})
                       if (content) {
-                        await pasteImage({
-                          filename,
-                          filepath,
-                          mime,
-                          content,
-                        })
-                        return
+                        await pasteImage({ filename, filepath, mime, content })
+                        handled = true
                       }
                     }
                   } catch {}
                 }
 
-                const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
-                if (
-                  (lineCount >= 3 || pastedContent.length > 150) &&
-                  !sync.data.config.experimental?.disable_paste_summary
-                ) {
-                  event.preventDefault()
-                  pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
-                  return
+                if (!handled) {
+                  const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
+                  if (
+                    (lineCount >= 3 || pastedContent.length > 150) &&
+                    !sync.data.config.experimental?.disable_paste_summary
+                  ) {
+                    pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
+                  } else {
+                    input.insertText(normalizedText)
+                  }
                 }
 
-                input.insertText(normalizedText)
-
-                // Force layout update and render for the pasted content
                 setTimeout(() => {
-                  // setTimeout is a workaround and needs to be addressed properly
                   if (!input || input.isDestroyed) return
                   input.getLayoutNode().markDirty()
                   renderer.requestRender()
@@ -1175,6 +1204,12 @@ export function Prompt(props: PromptProps) {
                     <text fg={theme.textMuted}>·</text>
                     <text fg={theme.textMuted}>
                       V:{local.visionModel.parsed()!.model}
+                    </text>
+                  </Show>
+                  <Show when={(sync.data.config as any).voice?.mode === "stt_only"}>
+                    <text fg={theme.textMuted}>·</text>
+                    <text fg={props.voiceActive ? theme.success : theme.accent}>
+                      {props.voiceActive ? "● " : ""}Voice
                     </text>
                   </Show>
                 </box>
