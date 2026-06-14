@@ -789,17 +789,20 @@ export function Prompt(props: PromptProps) {
       })
       parts.push(...nonTextParts.map(assign))
 
+      const agentName = local.agent.current().name
       sdk.client.session
         .prompt({
           sessionID,
           ...selectedModel,
           messageID,
-          agent: local.agent.current().name,
+          agent: agentName,
           model: selectedModel,
           variant,
           parts,
         })
         .catch(() => {})
+
+
     }
     history.append({
       ...store.prompt,

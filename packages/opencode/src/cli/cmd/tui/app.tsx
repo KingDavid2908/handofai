@@ -1,5 +1,6 @@
 import { render, TimeToFirstDraw, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Config } from "@/config/config"
+import { PartID } from "@/session/schema"
 import { reconcile } from "solid-js/store"
 import { Clipboard } from "@tui/util/clipboard"
 import { Selection } from "@tui/util/selection"
@@ -47,6 +48,8 @@ import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { VoiceProvider, useVoice } from "./context/voice"
 import { VoiceParticipant } from "@/voice/rtc-participant"
+import { synthesizeWithLiveKit, synthesizeWithOpenAICompatible, synthesizeWithYarnGPT } from "@/tool/voice"
+import { ModelsDev } from "@/provider/models"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -974,6 +977,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
     exit()
   })
+
+
 
   const plugin = createMemo(() => {
     if (!ready()) return

@@ -175,7 +175,7 @@ function resolveAudioPath(source: string): string | null {
 
 
 
-async function synthesizeWithYarnGPT(
+export async function synthesizeWithYarnGPT(
   text: string,
   voice: string,
   vc: any,
@@ -204,7 +204,7 @@ async function synthesizeWithYarnGPT(
   return outPath
 }
 
-async function synthesizeWithOpenAICompatible(
+export async function synthesizeWithOpenAICompatible(
   text: string,
   model: string,
   voice: string,
@@ -235,7 +235,7 @@ async function synthesizeWithOpenAICompatible(
   return outPath
 }
 
-async function synthesizeWithLiveKit(
+export async function synthesizeWithLiveKit(
   text: string,
   model: string,
   voice: string,

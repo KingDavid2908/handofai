@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 import { uniqueBy } from "remeda"
@@ -14,6 +14,8 @@ import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
 import { NanoBrowserBridge } from "@/tool/browser/bridge"
+import { spawn, type ChildProcess } from "child_process"
+import fs from "fs"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -35,6 +37,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     }
 
+    let proc: ChildProcess | null = null
+    const logPath = path.join(Global.Path.state, "companion.log")
+
+    function killProc() {
+      if (!proc) return
+      try { proc.kill() } catch {}
+      proc = null
+    }
+
+    onCleanup(killProc)
+
     const agent = iife(() => {
       const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
       const visibleAgents = createMemo(() => sync.data.agent.filter((x) => !x.hidden))
@@ -53,6 +66,44 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.error,
         theme.info,
       ])
+      const isCompanion = () => agentStore.current === "companion"
+      createEffect(() => {
+        if (isCompanion()) {
+          try {
+            const root = path.resolve(import.meta.dirname, "../../../../../")
+            const electronPath = path.join(root, "companion", "node_modules", "electron", "dist",
+              process.platform === "win32" ? "electron.exe" : "electron")
+            const mainPath = path.join(root, "companion", "main.js")
+            const hasElectron = fs.existsSync(electronPath)
+            const hasMain = fs.existsSync(mainPath)
+            if (!hasElectron || !hasMain) {
+              fs.appendFileSync(logPath, `${Date.now()} companion SKIP electron=${hasElectron} main=${hasMain}\n`)
+              return
+            }
+
+            const port = new URL(sdk.url).port || "4096"
+            const out = fs.openSync(logPath, "a")
+            proc = spawn(electronPath, [mainPath, "--port", port], {
+              stdio: ["ignore", out, out],
+              detached: true,
+            })
+            fs.writeSync(out, `${Date.now()} companion SPAWN ${electronPath} ${mainPath} port=${port}\n`)
+            proc.on("error", (err) => {
+              fs.appendFileSync(logPath, `${Date.now()} companion ERROR ${err.message}\n`)
+              proc = null
+            })
+            proc.on("exit", (code) => {
+              fs.appendFileSync(logPath, `${Date.now()} companion EXIT code=${code}\n`)
+              proc = null
+            })
+          } catch (err: any) {
+            fs.appendFileSync(logPath, `${Date.now()} companion FATAL ${err?.message ?? err}\n`)
+          }
+        } else {
+          killProc()
+        }
+      })
+
       return {
         list() {
           return agents()

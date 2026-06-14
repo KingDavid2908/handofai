@@ -13,6 +13,7 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_COMPANION from "./prompt/companion.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -183,6 +184,37 @@ export namespace Agent {
               options: {},
               mode: "subagent",
               native: true,
+            },
+            companion: {
+              name: "companion",
+              description: "Passive companion mode. Watches silently in Wait mode, actively guides in Guide mode. Output appears on the companion overlay.",
+              options: {},
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  question: "allow",
+                  "*": "deny",
+                  grep: "allow",
+                  glob: "allow",
+                  read: "allow",
+                  bash: "deny",
+                  edit: {
+                    "*": "deny",
+                  },
+                  write: {
+                    "*": "deny",
+                  },
+                  webfetch: "allow",
+                  websearch: "allow",
+                  codesearch: "allow",
+                  vision: "allow",
+                  screen_capture: "allow",
+                }),
+                user,
+              ),
+              mode: "primary",
+              native: true,
+              prompt: PROMPT_COMPANION,
             },
             compaction: {
               name: "compaction",

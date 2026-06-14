@@ -32,6 +32,8 @@ export const VoiceConfig = z.object({
   instructions: z.string().optional(),
   sox_device: z.string().optional().default("0"),
   ffmpeg_device: z.string().optional(),
+  captureSystemAudio: z.boolean().default(true), // Capture both mic and system audio for interview mode
+  systemAudioDevice: z.string().optional(), // Optional override for system audio device
 })
 
 export type VoiceConfig = z.infer<typeof VoiceConfig>

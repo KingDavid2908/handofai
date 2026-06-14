@@ -1264,6 +1264,10 @@ export namespace Config {
             .describe("SoX waveaudio device index (Windows)"),
           ffmpeg_device: z.string().optional()
             .describe("FFmpeg dshow audio device name (Windows)"),
+          captureSystemAudio: z.boolean().default(true)
+            .describe("Capture both mic and system audio for interview mode"),
+          systemAudioDevice: z.string().optional()
+            .describe("Override system audio device name (e.g. Stereo Mix)"),
         })
         .optional()
         .describe("Voice agent configuration for STT/TTS, LiveKit credentials, and voice mode settings"),

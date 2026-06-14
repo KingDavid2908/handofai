@@ -30,3 +30,5 @@ logs/
 *.bun-build
 tsconfig.tsbuildinfo
 packages/opencode/bin/*.exe
+packages/opencode/companion/main.js
+packages/opencode/companion/*.node

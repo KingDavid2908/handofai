@@ -587,6 +587,53 @@ export function DialogVoice() {
         category: "Capture Devices",
         onSelect: openFfmpegPicker,
       },
+      {
+        title: "Capture System Audio",
+        value: "capture_system_audio",
+        description: c?.captureSystemAudio ? "Enabled (mic + system audio)" : "Disabled (mic only)",
+        category: "Capture Devices",
+        onSelect: async () => {
+          const next = !c?.captureSystemAudio
+          await save({ captureSystemAudio: next })
+          dialog.clear()
+          toast.show({ message: `System audio capture: ${next ? "ON" : "OFF"}`, variant: "success", duration: 2000 })
+        },
+      },
+      {
+        title: "System Audio Device",
+        value: "system_audio_device",
+        description: c?.systemAudioDevice || "Auto-detect",
+        category: "Capture Devices",
+        onSelect: async () => {
+          const devices = await listDevices()
+          const loopback = devices.filter(d =>
+            d.name.toLowerCase().includes("mix") ||
+            d.name.toLowerCase().includes("loopback") ||
+            d.name.toLowerCase().includes("virtual") ||
+            d.name.toLowerCase().includes("what u hear")
+          )
+          const pick = loopback.length > 0 ? loopback : devices
+          if (pick.length === 0) {
+            dialog.clear()
+            toast.show({ message: "No system audio devices found", variant: "error", duration: 3000 })
+            return
+          }
+          dialog.replace(() => (
+            <DialogSelect
+              title="Select System Audio Device"
+              options={[
+                { title: "Auto-detect", value: "", footer: !c?.systemAudioDevice ? "Current" : undefined, onSelect: async () => { await save({ systemAudioDevice: "" }); dialog.clear() } },
+                ...pick.map(d => ({
+                  title: d.name,
+                  value: d.name,
+                  footer: c?.systemAudioDevice === d.name ? "Current" : undefined,
+                  onSelect: async () => { await save({ systemAudioDevice: d.name }); dialog.clear() },
+                })),
+              ]}
+            />
+          ))
+        },
+      },
     ]
   })
 

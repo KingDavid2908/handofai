@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Terminal</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+  <body>
+  <div id="cursor-follower"></div>
+  <!-- Toolbar -->
+  <div id="bar">
+    <div class="bar-inner">
+      <button id="btnScreenshot" class="btn" title="Screenshot (Ctrl+Shift+S)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      </button>
+      <button id="btnMic" class="btn active" title="Mic">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+      </button>
+      <button id="btnMode" class="btn mode-wait" title="Toggle Wait/Guide mode">
+        <span class="mode-text">Wait</span>
+      </button>
+      <button id="btnWeb" class="btn active" title="Web Search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+      <button id="btnTTS" class="btn active" title="TTS">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+      </button>
+       <button id="btnSettings" class="btn" title="Settings">
+         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+       </button>
+        <button id="btnStealth" class="btn" title="Toggle Stealth Mode">
+          <span class="btn-icon">👁️</span>
+        </button>
+        <button id="btnChatToggle" class="btn active" title="Toggle Chat Window">
+          <span class="btn-icon">💬</span>
+        </button>
+        <button id="btnSave" class="btn" title="Save Conversation">
+          <span class="btn-icon">💾</span>
+        </button>
+       <button id="btnClose" class="btn" title="Close">
+         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+       </button>
+    </div>
+  </div>
+
+   <!-- Chat Panel -->
+   <div id="panel">
+
+     <div id="messages">
+       <div id="placeholder">
+         Ask a question or press <kbd>Ctrl+Shift+S</kbd> to screenshot<br/>
+         <kbd>Ctrl+Shift+I</kbd> / <kbd>Alt+A</kbd> toggle click-through &middot; <kbd>Esc</kbd> escape
+       </div>
+     </div>
+     <div id="inputArea">
+       <input type="text" id="chatInput" placeholder="Ask your companion..." />
+       <button id="btnMicInput" class="btn" title="Dictate your question">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+       </button>
+       <button id="btnSend" class="btn">Send</button>
+     </div>
+   </div>
+
+  <!-- Settings -->
+  <div id="settingsPane" class="hidden">
+    <h3>Settings</h3>
+    <label><input type="checkbox" id="chkExternalAudio" /> Listen to external audio</label>
+    <label>Silence timeout (ms): <input type="number" id="chkSilenceTimeout" value="2000" min="500" step="100" /></label>
+    <label>Screenshot interval (ms): <input type="number" id="chkScreenshotInterval" value="20000" min="5000" step="1000" /></label>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

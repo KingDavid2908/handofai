@@ -1,0 +1,35 @@
+{
+  "name": "@opencode-ai/companion",
+  "private": true,
+  "version": "1.0.0",
+  "type": "commonjs",
+  "main": "main.js",
+  "description": "Companion overlay for handofai",
+  "scripts": {
+    "build": "bun build ./src/main.ts --outdir ./ --target node --format cjs --external electron",
+    "rebuild": "bun install"
+  },
+  "dependencies": {
+    "electron": "40.4.1",
+    "ai": "^6.0.0",
+    "@ai-sdk/openai": "^3.0.0",
+    "@ai-sdk/anthropic": "^3.0.0",
+    "@ai-sdk/google": "^3.0.0",
+    "@ai-sdk/mistral": "^3.0.0",
+    "@ai-sdk/xai": "^3.0.0",
+    "@ai-sdk/groq": "^3.0.0",
+    "@ai-sdk/openai-compatible": "^2.0.0",
+    "@ai-sdk/deepinfra": "^2.0.0",
+    "@ai-sdk/cerebras": "^2.0.0",
+    "@ai-sdk/cohere": "^3.0.0",
+    "@ai-sdk/togetherai": "^2.0.0",
+    "@ai-sdk/perplexity": "^3.0.0",
+    "@ai-sdk/vercel": "^2.0.0",
+    "@ai-sdk/azure": "^3.0.0",
+    "@openrouter/ai-sdk-provider": "^2.0.0",
+    "@livekit/agents": "^1.4.4",
+    "@livekit/rtc-node": "^0.13.29",
+    "electron-audio-loopback": "^1.0.6",
+    "@tiny-fish/sdk": "^0.0.8"
+  }
+}
