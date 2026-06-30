@@ -170,6 +170,15 @@ export namespace ProviderError {
         metadata?: Record<string, string>
       }
 
+  export class ResponseStreamError extends Error {
+    override cause?: unknown
+    constructor(message: string, opts?: { cause?: unknown }) {
+      super(message)
+      this.name = "ResponseStreamError"
+      this.cause = opts?.cause
+    }
+  }
+
   export function parseAPICallError(input: { providerID: ProviderID; error: APICallError }): ParsedAPICallError {
     const m = message(input.providerID, input.error)
     const body = json(input.error.responseBody)

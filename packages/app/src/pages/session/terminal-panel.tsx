@@ -18,7 +18,6 @@ import { terminalTabLabel } from "@/pages/session/terminal-label"
 import { createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { getTerminalHandoff, setTerminalHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { terminalProbe } from "@/testing/terminal"
 
 export function TerminalPanel() {
   const delays = [120, 240]
@@ -37,6 +36,7 @@ export function TerminalPanel() {
   const [store, setStore] = createStore({
     autoCreated: false,
     activeDraggable: undefined as string | undefined,
+    recovered: {} as Record<string, boolean>,
     view: typeof window === "undefined" ? 1000 : (window.visualViewport?.height ?? window.innerHeight),
   })
 
@@ -81,12 +81,9 @@ export function TerminalPanel() {
   )
 
   const focus = (id: string) => {
-    const probe = terminalProbe(id)
-    probe.focus(delays.length + 1)
     focusTerminalById(id)
 
     const frame = requestAnimationFrame(() => {
-      probe.step()
       if (!opened()) return
       if (terminal.active() !== id) return
       focusTerminalById(id)
@@ -94,7 +91,6 @@ export function TerminalPanel() {
 
     const timers = delays.map((ms) =>
       window.setTimeout(() => {
-        probe.step()
         if (!opened()) return
         if (terminal.active() !== id) return
         focusTerminalById(id)
@@ -102,7 +98,6 @@ export function TerminalPanel() {
     )
 
     return () => {
-      probe.focus(0)
       cancelAnimationFrame(frame)
       for (const timer of timers) clearTimeout(timer)
     }
@@ -150,6 +145,21 @@ export function TerminalPanel() {
     if (!dir) return []
     return getTerminalHandoff(dir) ?? []
   })
+
+  const recoverTerminal = (key: string, id: string, clone: (id: string) => Promise<void>) => {
+    if (store.recovered[key]) return
+    setStore("recovered", key, true)
+    void clone(id)
+  }
+
+  const terminalRecoveryKey = (pty: { id: string; title: string; titleNumber: number }) => {
+    return String(pty.titleNumber || pty.title || pty.id)
+  }
+
+  const markTerminalConnected = (key: string, id: string, trim: (id: string) => void) => {
+    setStore("recovered", key, false)
+    trim(id)
+  }
 
   const all = terminal.all
   const ids = createMemo(() => all().map((pty) => pty.id))
@@ -289,9 +299,9 @@ export function TerminalPanel() {
                             <Terminal
                               pty={pty()}
                               autoFocus={opened()}
-                              onConnect={() => ops.trim(id)}
+                              onConnect={() => markTerminalConnected(terminalRecoveryKey(pty()), id, ops.trim)}
                               onCleanup={ops.update}
-                              onConnectError={() => ops.clone(id)}
+                              onConnectError={() => recoverTerminal(terminalRecoveryKey(pty()), id, ops.clone)}
                             />
                           </div>
                         )}

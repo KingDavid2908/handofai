@@ -23,17 +23,23 @@ const PROVIDER_PRIORITY: Record<string, number> = {
   google: 5,
 }
 
+const CONNECTED = "\u2713 "
+
 export function createDialogProviderOptions() {
   const sync = useSync()
   const dialog = useDialog()
   const sdk = useSDK()
   const toast = useToast()
   const options = createMemo(() => {
-    return pipe(
+    const connected = sync.data.provider_next.connected
+    const options: any[] = pipe(
       sync.data.provider_next.all,
-      sortBy((x) => PROVIDER_PRIORITY[x.id] ?? 99),
+      sortBy(
+        (x) => PROVIDER_PRIORITY[x.id] ?? 99,
+        (x) => x.name,
+      ),
       map((provider) => ({
-        title: provider.name,
+        title: (connected.includes(provider.id) ? CONNECTED : "") + provider.name,
         value: provider.id,
         description: {
           opencode: "(Recommended)",
@@ -105,18 +111,49 @@ export function createDialogProviderOptions() {
             }
           }
           if (method.type === "api") {
-            return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
+            let metadata: Record<string, string> | undefined
+            if (method.prompts?.length) {
+              const value = await PromptsMethod({ dialog, prompts: method.prompts })
+              if (!value) return
+              metadata = value
+            }
+            return dialog.replace(() => (
+              <ApiMethod providerID={provider.id} title={method.label} metadata={metadata} />
+            ))
           }
         },
       })),
     )
+    const customOption: any = {
+      title: "OpenAI-compatible",
+      value: "openai-compatible",
+      description: "Connect to any OpenAI-compatible API endpoint",
+      category: "Other",
+      async onSelect() {
+        const { DialogOpenAICompatible } = await import("./dialog-openai-compatible")
+        dialog.replace(() => <DialogOpenAICompatible />)
+      },
+    }
+    return [...options, customOption]
   })
   return options
 }
 
 export function DialogProvider() {
+  const sync = useSync()
+  const { theme } = useTheme()
   const options = createDialogProviderOptions()
-  return <DialogSelect title="Connect a provider" options={options()} />
+  const connected = () => sync.data.provider_next.connected?.length ?? 0
+  return (
+    <box flexDirection="column">
+      <DialogSelect title="Connect a provider" options={options()} />
+      <Show when={connected() > 0}>
+        <text fg={theme.textMuted} paddingLeft={2}>
+          {connected()} credential{connected() === 1 ? "" : "s"} stored
+        </text>
+      </Show>
+    </box>
+  )
 }
 
 interface AutoMethodProps {
@@ -147,7 +184,22 @@ function AutoMethod(props: AutoMethodProps) {
       method: props.index,
     })
     if (result.error) {
-      dialog.clear()
+      dialog.replace(() => (
+        <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
+          <box flexDirection="row" justifyContent="space-between">
+            <text attributes={TextAttributes.BOLD} fg={theme.text}>
+              {props.title}
+            </text>
+            <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+              esc
+            </text>
+          </box>
+          <text fg={theme.error}>Authorization failed: {JSON.stringify(result.error)}</text>
+          <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+            Press esc to go back
+          </text>
+        </box>
+      ))
       return
     }
     await sdk.client.instance.dispose()
@@ -224,12 +276,14 @@ function CodeMethod(props: CodeMethodProps) {
 interface ApiMethodProps {
   providerID: string
   title: string
+  metadata?: Record<string, string>
 }
 function ApiMethod(props: ApiMethodProps) {
   const dialog = useDialog()
   const sdk = useSDK()
   const sync = useSync()
   const { theme } = useTheme()
+  const toast = useToast()
 
   return (
     <DialogPrompt
@@ -268,10 +322,19 @@ function ApiMethod(props: ApiMethodProps) {
           auth: {
             type: "api",
             key: value,
+            ...(props.metadata ? { metadata: props.metadata } : {}),
           },
         })
         await sdk.client.instance.dispose()
         await sync.bootstrap()
+        if (!sync.data.provider_next.all.some((p) => p.id === props.providerID)) {
+          toast.show({
+            variant: "info",
+            message: `Saved credential for ${props.providerID}. Configure it in opencode.json to use it.`,
+          })
+          dialog.clear()
+          return
+        }
         dialog.replace(() => <DialogModel providerID={props.providerID} />)
       }}
     />

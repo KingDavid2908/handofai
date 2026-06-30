@@ -171,6 +171,7 @@ export namespace Agent {
                   webfetch: "allow",
                   websearch: "allow",
                   codesearch: "allow",
+                  discover: "allow",
                   read: "allow",
                   external_directory: {
                     "*": "ask",
@@ -196,6 +197,7 @@ export namespace Agent {
                   "*": "deny",
                   grep: "allow",
                   glob: "allow",
+                  discover: "allow",
                   read: "allow",
                   bash: "deny",
                   edit: {

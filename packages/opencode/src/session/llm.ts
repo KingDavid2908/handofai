@@ -323,12 +323,26 @@ export namespace LLM {
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
+    const builtinIDs = new Set([
+      "bash", "browser", "websearch", "webfetch", "read", "write", "edit", "grep", "glob", "task",
+      "memory", "vision", "voice", "skill", "todo", "codesearch", "session_search", "lesson", "skills_list",
+      "skill_manage", "moa", "cronjob", "apply_patch", "question", "process", "shell", "filesystem",
+      "list", "multiedit", "plan_enter", "plan_exit", "plugin",
+      "batch", "connector", "lsp", "truncate", "media", "invalid", "discover", "typescript",
+    ])
     const disabled = Permission.disabled(
       Object.keys(input.tools),
       Permission.merge(input.agent.permission, input.permission ?? []),
     )
     for (const tool of Object.keys(input.tools)) {
-      if (input.user.tools?.[tool] === false || disabled.has(tool)) {
+      // User-level deny always respected for all tools
+      if (input.user.tools?.[tool] === false) {
+        delete input.tools[tool]
+        continue
+      }
+      // Permission deny only applies to built-in tools
+      // Custom tools bypass agent permissions so they work in any mode
+      if (builtinIDs.has(tool) && disabled.has(tool)) {
         delete input.tools[tool]
       }
     }

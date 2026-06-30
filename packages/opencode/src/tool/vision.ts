@@ -4,11 +4,14 @@ import { Tool } from "./tool"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Global } from "../global"
+import { Log } from "../util/log"
 import type { Provider } from "../provider/provider"
 import { Provider as ProviderModule } from "../provider/provider"
 import Decimal from "decimal.js"
 import { MessageV2 } from "../session/message-v2"
 import { SessionID } from "../session/schema"
+
+const log = Log.create({ service: "vision-tool" })
 
 const MAX_DOWNLOAD_SIZE = 10 * 1024 * 1024
 const RETRY_DELAYS = [2000, 4000, 8000]
@@ -144,14 +147,19 @@ export const VisionTool = Tool.define("vision", {
       )
       const model = await ProviderModule.getModel(providerID, modelID).catch(() => null)
 
-      if (model) {
-        const { analysis, cost } = await analyzeWithModel(dataUrl, question, model, isVideo)
-        return {
-          title: `Vision: ${mediaLabel}`,
-          output: analysis,
-          metadata: { cost },
-        }
-      }
+       if (model) {
+         try {
+           const { analysis, cost } = await analyzeWithModel(dataUrl, question, model, isVideo)
+           return {
+             title: `Vision: ${mediaLabel}`,
+             output: analysis,
+             metadata: { cost },
+           }
+         } catch (visionError) {
+           // Propagate vision-specific errors so the agent knows why it failed
+           throw visionError
+         }
+       }
 
       throw new Error(
         `Configured vision model "${visionModelEntry.providerID}/${visionModelEntry.modelID}" is no longer available. ` +
@@ -340,6 +348,9 @@ async function analyzeWithModel(
   const { streamText } = await import("ai")
 
   const mediaType = isVideo ? "video" : "image"
+  
+  let errorOccurred = false
+  let lastError: unknown = null
 
   const result = streamText({
     model: language,
@@ -359,6 +370,11 @@ async function analyzeWithModel(
       },
     ],
     system: `You are a helpful assistant that analyzes ${mediaType}s. Provide detailed, accurate descriptions and answers.`,
+    onError(error) {
+      log.error("vision stream error", { error })
+      errorOccurred = true
+      lastError = error
+    },
   })
 
   let response = ""
@@ -369,6 +385,49 @@ async function analyzeWithModel(
     }
     if (chunk.type === "finish") usage = chunk.totalUsage
   }
+
+   // If an error occurred during streaming, throw it instead of returning fake success
+   if (errorOccurred) {
+     // Extract meaningful error message from the error object
+     let errorMessage = 'Unknown vision API error'
+     
+     if (lastError instanceof Error) {
+       errorMessage = lastError.message
+     } else if (lastError !== null && typeof lastError === 'object') {
+       // Try to extract meaningful information from error objects
+       if ('message' in lastError && typeof (lastError as any).message === 'string') {
+         errorMessage = (lastError as any).message
+       } else if ('error' in lastError && typeof (lastError as any).error === 'object') {
+         const errObj = (lastError as any).error
+         if ('message' in errObj && typeof errObj.message === 'string') {
+           errorMessage = errObj.message
+         } else if ('title' in errObj && typeof errObj.title === 'string') {
+           errorMessage = errObj.title
+           if ('message' in errObj && typeof errObj.message === 'string') {
+             errorMessage += `: ${errObj.message}`
+           }
+         }
+       } else {
+         // Try to stringify safely, but provide better fallback for common cases
+         try {
+           const jsonStr = JSON.stringify(lastError)
+           // If it's a small JSON object, use it directly
+           if (jsonStr.length < 200) {
+             errorMessage = jsonStr
+           } else {
+             // For large objects, try to extract key fields
+             errorMessage = 'Vision API error (see logs for details)'
+           }
+         } catch {
+           errorMessage = String(lastError)
+         }
+       }
+     } else {
+       errorMessage = String(lastError)
+     }
+     
+     throw new Error(`Vision API failed: ${errorMessage}`)
+   }
 
   const cost = calcCost(model, usage)
   return { analysis: response || "No analysis returned from the model.", cost }

@@ -15,6 +15,7 @@ export class SessionTools {
   private tools: Map<string, DiscoveredTool> = new Map()
   private sessionId: string
   private availableCustomTools: Set<string> = new Set()
+  private availableBuiltinTools: Set<string> = new Set()
 
   constructor(sessionId: string) {
     this.sessionId = sessionId
@@ -34,6 +35,34 @@ export class SessionTools {
   }
 
   /**
+   * Register a built-in tool that needs discovery
+   * Built-in tools are hidden until the agent calls discover.help("name")
+   */
+  registerBuiltinTool(toolName: string): void {
+    this.availableBuiltinTools.add(toolName)
+    log.debug("Built-in tool registered (needs discovery)", {
+      sessionId: this.sessionId,
+      name: toolName,
+    })
+  }
+
+  /**
+   * Get list of built-in tools that need discovery
+   */
+  getUndiscoveredBuiltinTools(): string[] {
+    return Array.from(this.availableBuiltinTools).filter((name) => !this.tools.has(name))
+  }
+
+  /**
+   * Get combined list of all undiscovered tools (built-in + custom)
+   */
+  getAllUndiscoveredTools(): string[] {
+    const builtin = this.getUndiscoveredBuiltinTools()
+    const custom = this.getUndiscoveredCustomTools()
+    return [...builtin, ...custom]
+  }
+
+  /**
    * Get list of custom tools that need discovery
    */
   getUndiscoveredCustomTools(): string[] {
@@ -45,6 +74,13 @@ export class SessionTools {
    */
   getAvailableCustomTools(): string[] {
     return Array.from(this.availableCustomTools)
+  }
+
+  /**
+   * Get list of all available built-in tool names (both discovered and undiscovered)
+   */
+  getAvailableBuiltinTools(): string[] {
+    return Array.from(this.availableBuiltinTools)
   }
 
   /**
@@ -183,6 +219,8 @@ export class SessionTools {
    */
   clear(): void {
     this.tools.clear()
+    this.availableCustomTools.clear()
+    this.availableBuiltinTools.clear()
     log.debug("Session tools cleared", { sessionId: this.sessionId })
   }
 }

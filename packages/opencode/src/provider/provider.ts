@@ -215,9 +215,12 @@ export namespace Provider {
       }
     },
     azure: async (provider) => {
+      const auth = await Auth.get(provider.id)
       const resource = iife(() => {
-        const name = provider.options?.resourceName
-        if (typeof name === "string" && name.trim() !== "") return name
+        const opts = provider.options?.resourceName
+        if (typeof opts === "string" && opts.trim() !== "") return opts
+        const meta = auth?.type === "api" ? auth.metadata?.resourceName : undefined
+        if (typeof meta === "string" && meta.trim() !== "") return meta
         return Env.get("AZURE_RESOURCE_NAME")
       })
 
@@ -663,13 +666,14 @@ export namespace Provider {
       }
     },
     "cloudflare-workers-ai": async (input) => {
-      const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
+      const auth = await Auth.get(input.id)
+      const accountId =
+        Env.get("CLOUDFLARE_ACCOUNT_ID") || (auth?.type === "api" ? auth.metadata?.accountId : undefined)
       if (!accountId) return { autoload: false }
 
       const apiKey = await iife(async () => {
         const envToken = Env.get("CLOUDFLARE_API_KEY")
         if (envToken) return envToken
-        const auth = await Auth.get(input.id)
         if (auth?.type === "api") return auth.key
         return undefined
       })
@@ -690,8 +694,11 @@ export namespace Provider {
       }
     },
     "cloudflare-ai-gateway": async (input) => {
-      const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
-      const gateway = Env.get("CLOUDFLARE_GATEWAY_ID")
+      const auth = await Auth.get(input.id)
+      const accountId =
+        Env.get("CLOUDFLARE_ACCOUNT_ID") || (auth?.type === "api" ? auth.metadata?.accountId : undefined)
+      const gateway =
+        Env.get("CLOUDFLARE_GATEWAY_ID") || (auth?.type === "api" ? auth.metadata?.gatewayId : undefined)
 
       if (!accountId || !gateway) return { autoload: false }
 
@@ -699,7 +706,6 @@ export namespace Provider {
       const apiToken = await (async () => {
         const envToken = Env.get("CLOUDFLARE_API_TOKEN") || Env.get("CF_AIG_TOKEN")
         if (envToken) return envToken
-        const auth = await Auth.get(input.id)
         if (auth?.type === "api") return auth.key
         return undefined
       })()

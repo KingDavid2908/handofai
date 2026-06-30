@@ -25,10 +25,11 @@ export namespace ProviderTransform {
     switch (npm) {
       case "@ai-sdk/github-copilot":
         return "copilot"
+      case "@ai-sdk/openai":
+      case "@ai-sdk/openai-compatible":
+        return "openai"
       case "@ai-sdk/azure":
         return "azure"
-      case "@ai-sdk/openai":
-        return "openai"
       case "@ai-sdk/amazon-bedrock":
         return "bedrock"
       case "@ai-sdk/anthropic":
@@ -754,6 +755,7 @@ export namespace ProviderTransform {
     if (
       input.model.providerID === "openai" ||
       input.model.api.npm === "@ai-sdk/openai" ||
+      input.model.api.npm === "@ai-sdk/openai-compatible" ||
       input.model.api.npm === "@ai-sdk/github-copilot"
     ) {
       result["store"] = false

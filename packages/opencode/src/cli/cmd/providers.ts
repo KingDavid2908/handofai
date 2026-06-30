@@ -164,6 +164,21 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
       prompts.outro("Done")
       return true
     }
+
+    const key = await prompts.password({
+      message: "Enter your API key",
+      validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+    })
+    if (prompts.isCancel(key)) throw new UI.CancelledError()
+
+    await Auth.set(provider, {
+      type: "api",
+      key,
+      ...(Object.keys(inputs).length > 0 ? { metadata: inputs } : {}),
+    })
+    prompts.log.success("Login successful")
+    prompts.outro("Done")
+    return true
   }
 
   return false

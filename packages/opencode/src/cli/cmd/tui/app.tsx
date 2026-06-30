@@ -33,6 +33,7 @@ import { LocalProvider, useLocal } from "@tui/context/local"
 import { DialogModel, useConnected } from "@tui/component/dialog-model"
 import { DialogMoaConfig } from "@tui/component/dialog-moa-config"
 import { DialogVisionModel } from "@tui/component/dialog-vision-model"
+import { DialogUpdateProvider } from "@tui/component/dialog-update-provider"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogGateway } from "@tui/component/dialog-gateway"
 import { DialogStatus } from "@tui/component/dialog-status"
@@ -717,6 +718,17 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
       onSelect: () => {
         dialog.replace(() => <DialogProviderList />)
+      },
+      category: "Provider",
+    },
+    {
+      title: "Update provider metadata",
+      value: "provider.update",
+      slash: {
+        name: "update",
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogUpdateProvider />)
       },
       category: "Provider",
     },

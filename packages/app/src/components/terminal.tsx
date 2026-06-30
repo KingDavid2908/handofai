@@ -2,7 +2,7 @@ import { withAlpha } from "@opencode-ai/ui/theme/color"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
 import type { HexColor } from "@opencode-ai/ui/theme/types"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@/utils/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
 import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
 import { SerializeAddon } from "@/addons/serialize"
@@ -13,9 +13,9 @@ import { useSDK } from "@/context/sdk"
 import { useServer } from "@/context/server"
 import { monoFontFamily, useSettings } from "@/context/settings"
 import type { LocalPTY } from "@/context/terminal"
-import { terminalAttr, terminalProbe } from "@/testing/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
+import { terminalWebSocketURL } from "@/utils/terminal-websocket-url"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
 const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
@@ -66,13 +66,6 @@ const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
 const debugTerminal = (...values: unknown[]) => {
   if (!import.meta.env.DEV) return
   console.debug("[terminal]", ...values)
-}
-
-const errorName = (err: unknown) => {
-  if (!err || typeof err !== "object") return
-  if (!("name" in err)) return
-  const errorName = err.name
-  return typeof errorName === "string" ? errorName : undefined
 }
 
 const useTerminalUiBindings = (input: {
@@ -174,10 +167,10 @@ export const Terminal = (props: TerminalProps) => {
   const auth = server.current?.http
   const username = auth?.username ?? "opencode"
   const password = auth?.password ?? ""
+  const sameOrigin = new URL(url, location.href).origin === location.origin
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
   const id = local.pty.id
-  const probe = terminalProbe(id)
   const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
   const restoreSize =
     restore &&
@@ -348,9 +341,6 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   onMount(() => {
-    probe.init()
-    cleanups.push(() => probe.drop())
-
     const run = async () => {
       const loaded = await loadGhostty()
       if (disposed) return
@@ -380,8 +370,6 @@ export const Terminal = (props: TerminalProps) => {
       term = t
       output = terminalWriter((data, done) =>
         t.write(data, () => {
-          probe.render(data)
-          probe.settle()
           done?.()
         }),
       )
@@ -421,7 +409,7 @@ export const Terminal = (props: TerminalProps) => {
       if (local.autoFocus !== false) focusTerminal()
 
       if (typeof document !== "undefined" && document.fonts) {
-        document.fonts.ready.then(scheduleFit)
+        void document.fonts.ready.then(scheduleFit)
       }
 
       const onResize = t.onResize((size) => {
@@ -484,13 +472,33 @@ export const Terminal = (props: TerminalProps) => {
 
       const gone = () =>
         client.pty
-          .get({ ptyID: id })
-          .then(() => false)
+          .get({ ptyID: id }, { throwOnError: false })
+          .then((result) => result.response.status === 404)
           .catch((err) => {
-            if (errorName(err) === "NotFoundError") return true
             debugTerminal("failed to inspect terminal session", err)
             return false
           })
+
+      const connectToken = async () => {
+        const result = await client.pty
+          .connectToken(
+            { ptyID: id, directory },
+            {
+              throwOnError: false,
+              headers: { "x-opencode-ticket": "1" },
+            },
+          )
+          .catch((err: unknown) => {
+            if (err instanceof Error && err.message.includes("Request is not supported")) return
+            throw err
+          })
+        if (!result) return
+        if (result.response.status === 200 && result.data?.ticket) return result.data.ticket
+        if (result.response.status === 404 || result.response.status === 405) return
+        if (result.response.status === 403)
+          throw new Error("PTY connect ticket rejected by origin or CSRF checks. Check the server CORS config.")
+        throw new Error(`PTY connect ticket failed with ${result.response.status}`)
+      }
 
       const retry = (err: unknown) => {
         if (disposed) return
@@ -511,25 +519,36 @@ export const Terminal = (props: TerminalProps) => {
         }, ms)
       }
 
-      const open = () => {
+      const open = async () => {
         if (disposed) return
         drop?.()
 
-        const next = new URL(url + `/pty/${id}/connect`)
-        next.searchParams.set("directory", directory)
-        next.searchParams.set("cursor", String(seek))
-        next.protocol = next.protocol === "https:" ? "wss:" : "ws:"
-        next.username = username
-        next.password = password
+        const ticket = await connectToken().catch((err) => {
+          fail(err)
+          return undefined
+        })
+        if (once.value) return
+        if (disposed) return
 
-        const socket = new WebSocket(next)
+        const socket = new WebSocket(
+          terminalWebSocketURL({
+            url,
+            id,
+            directory,
+            cursor: seek,
+            ticket,
+            sameOrigin,
+            username,
+            password,
+            authToken: server.current?.type === "http" ? server.current.authToken : false,
+          }),
+        )
         socket.binaryType = "arraybuffer"
         ws = socket
 
         const handleOpen = () => {
           if (disposed) return
           tries = 0
-          probe.connect()
           local.onConnect?.()
           scheduleSize(t.cols, t.rows)
         }
@@ -594,13 +613,6 @@ export const Terminal = (props: TerminalProps) => {
         socket.addEventListener("close", handleClose)
       }
 
-      probe.control({
-        disconnect: () => {
-          if (!ws) return
-          ws.close(4_000, "e2e")
-        },
-      })
-
       open()
     }
 
@@ -640,7 +652,6 @@ export const Terminal = (props: TerminalProps) => {
     <div
       ref={container}
       data-component="terminal"
-      {...{ [terminalAttr]: id }}
       data-prevent-autofocus
       tabIndex={-1}
       style={{ "background-color": terminalColors().background }}

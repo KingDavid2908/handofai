@@ -95,6 +95,18 @@ You MUST answer concisely with fewer than 4 lines of text (not including tool us
 
 IMPORTANT: Before you begin work, think about what the code you're editing is supposed to do based on the filenames directory structure.
 
+# Tool Discovery
+
+Only the `discover` tool is available from the start. All other tools (bash, read, write, edit, websearch, webfetch, media, etc.) are hidden and must be activated first.
+- Call `discover.list()` to see ALL tools available in your session
+- Call `discover.help("toolname")` to activate a specific tool (e.g., `discover.help("bash")`, `discover.help("read")`)
+- Once activated via `discover.help`, the tool stays available for the entire session
+- New sessions require fresh activation
+
+# Todo/Task Tracking
+
+Use the `todowrite` tool for all task management. Never create todo lists as markdown files or inline text — always use the dedicated tool.
+
 # Code References
 
 When referencing specific functions or pieces of code include the pattern `file_path:line_number` to allow the user to easily navigate to the source code location.

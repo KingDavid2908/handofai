@@ -18,9 +18,11 @@ import { type ToolDefinition } from "./tool.js"
 export * from "./tool.js"
 
 export type ProviderContext = {
+  id: string
   source: "env" | "config" | "custom" | "api"
   info: Provider
   options: Record<string, any>
+  models: Record<string, any>
 }
 
 export type PluginInput = {
@@ -179,10 +181,18 @@ export type AuthOuathResult = AuthOAuthResult
 export interface Hooks {
   event?: (input: { event: Event }) => Promise<void>
   config?: (input: Config) => Promise<void>
+  dispose?: () => Promise<void>
   tool?: {
     [key: string]: ToolDefinition
   }
   auth?: AuthHook
+  provider?: {
+    id: string
+    models(
+      provider: ProviderContext,
+      ctx: { directory: string; auth?: { type: string; key: string; metadata?: Record<string, string>; refresh?: string; enterpriseUrl?: string } },
+    ): Promise<Record<string, any>>
+  }
   /**
    * Called when a new message is received
    */
@@ -201,7 +211,7 @@ export interface Hooks {
    */
   "chat.params"?: (
     input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
-    output: { temperature: number; topP: number; topK: number; options: Record<string, any> },
+    output: { temperature: number; topP: number; topK: number; maxOutputTokens?: number; options: Record<string, any> },
   ) => Promise<void>
   "chat.headers"?: (
     input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
@@ -262,4 +272,8 @@ export interface Hooks {
    * Modify tool definitions (description and parameters) sent to LLM
    */
   "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
+  "experimental.provider.small_model"?: (
+    input: { provider: ProviderContext; modelID: string },
+    output: { model: any },
+  ) => Promise<void>
 }

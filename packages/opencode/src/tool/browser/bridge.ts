@@ -7,6 +7,7 @@ import fs from "fs"
 import os from "os"
 import path from "path"
 import { Global } from "@/global"
+import { Log } from "@/util/log"
 
 interface PendingCommand {
   resolve: (value: any) => void
@@ -87,6 +88,8 @@ function setupCleanup() {
   process.on("SIGTERM", () => { cleanup(); process.exit(0) })
   process.on("uncaughtException", () => { cleanup() })
 }
+
+const log = Log.create({ service: "browser-bridge" })
 
 export class NanoBrowserBridge extends EventEmitter {
   private static instance: NanoBrowserBridge | null = null
@@ -396,11 +399,11 @@ export class NanoBrowserBridge extends EventEmitter {
         )
       }
 
-      console.log(`[Bridge] Using vision model: ${vision.providerID}/${vision.modelID}`)
+       log.info(`[Bridge] Using vision model: ${vision.providerID}/${vision.modelID}`)
       const response = await this.callProvider(vision.providerID, vision.modelID, messages, parameters)
       this.client?.send(JSON.stringify({ type: "llm_response", id, response }))
     } catch (err) {
-      console.error(`[Bridge] LLM request failed:`, err)
+      log.error(`[Bridge] LLM request failed:`, { error: err })
       this.client?.send(JSON.stringify({
         type: "llm_error",
         id,
@@ -436,11 +439,11 @@ export class NanoBrowserBridge extends EventEmitter {
     messages: any[],
     parameters: Record<string, unknown>,
   ): Promise<any> {
-    console.log(`[Bridge] Getting model config for ${providerID}/${modelID}`)
+     log.info(`[Bridge] Getting model config for ${providerID}/${modelID}`)
     const modelConfig = await Provider.getModel(providerID as any, modelID as ModelID)
-    console.log(`[Bridge] Got model config, getting language`)
+     log.info(`[Bridge] Got model config, getting language`)
     const language = await Provider.getLanguage(modelConfig)
-    console.log(`[Bridge] Got language: ${language}`)
+     log.info(`[Bridge] Got language: ${language}`)
 
     const { coreMessages, systemPrompt } = this.mapMessages(messages)
 
@@ -457,9 +460,9 @@ export class NanoBrowserBridge extends EventEmitter {
     if ((parameters as any).topP !== undefined) opts.topP = (parameters as any).topP
     if ((parameters as any).maxTokens !== undefined) opts.maxTokens = (parameters as any).maxTokens
 
-    console.log(`[Bridge] Calling generateText...`)
+     log.info(`[Bridge] Calling generateText...`)
     const result = await generateText(opts)
-    console.log(`[Bridge] generateText succeeded`)
+     log.info(`[Bridge] generateText succeeded`)
 
     return this.mapResponse(result)
   }
@@ -677,7 +680,7 @@ export class NanoBrowserBridge extends EventEmitter {
     try {
       const vision = await this.getVisionModel()
       if (!vision) {
-        console.log("[Bridge] No vision model configured, skipping provider config")
+         log.info("[Bridge] No vision model configured, skipping provider config")
         return
       }
 
@@ -687,10 +690,10 @@ export class NanoBrowserBridge extends EventEmitter {
           type: "provider_config",
           config,
         }))
-        console.log(`[Bridge] Sent provider config: ${vision.providerID}/${vision.modelID}`)
+         log.info(`[Bridge] Sent provider config: ${vision.providerID}/${vision.modelID}`)
       }
     } catch (err) {
-      console.error("[Bridge] Failed to send provider config:", err)
+       log.error("[Bridge] Failed to send provider config:", { error: err })
     }
   }
 
@@ -700,7 +703,7 @@ export class NanoBrowserBridge extends EventEmitter {
    */
   async broadcastProviderConfig(): Promise<void> {
     if (!this.client || this.client.readyState !== WebSocket.OPEN) {
-      console.log("[Bridge] No extension connected, skipping broadcast")
+       log.info("[Bridge] No extension connected, skipping broadcast")
       return
     }
 
@@ -758,7 +761,7 @@ export class NanoBrowserBridge extends EventEmitter {
         },
       }
     } catch (err) {
-      console.error("[Bridge] Failed to build provider config:", err)
+      log.error("[Bridge] Failed to build provider config:", { error: err })
       return null
     }
   }

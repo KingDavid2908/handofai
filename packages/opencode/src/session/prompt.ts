@@ -278,8 +278,6 @@ export namespace SessionPrompt {
     }
     match.abort.abort()
     delete s[sessionID]
-    // Clear SessionTools for this session
-    Session.clearSessionTools(sessionID)
     await SessionStatus.set(sessionID, { type: "idle" })
     return
   }
@@ -1017,29 +1015,37 @@ export namespace SessionPrompt {
       input.agent,
     )
     
-    // Register custom tools (from ~/.config/handofai/tool/) with session for discovery
+    // Tools always available without discovery
+    const alwaysAvailable = new Set(["discover"])
+
+    // Built-in tool IDs — everything except typescript/discover needs discovery
+    const builtinIDs = new Set([
+      "bash", "browser", "websearch", "webfetch", "read", "write", "edit", "grep", "glob", "task",
+      "memory", "vision", "voice", "skill", "todo", "codesearch", "session_search", "lesson", "skills_list",
+      "skill_manage", "moa", "cronjob", "apply_patch", "question", "process", "shell", "filesystem",
+      "list", "multiedit", "plan_enter", "plan_exit", "plugin",
+      "batch", "connector", "lsp", "truncate", "media", "invalid",
+    ])
+
+    // Register tools with session for discovery
     for (const item of allTools) {
-      // Check if this is a custom tool from the tool/ directory (not a built-in)
-      const isBuiltin = [
-        "bash", "browser", "websearch", "webfetch", "read", "write", "edit", "grep", "glob", "task",
-        "memory", "vision", "voice", "skill", "todo", "codesearch", "session_search", "lesson", "skills_list",
-        "skill_manage", "moa", "cronjob", "apply_patch", "question", "process", "shell", "filesystem",
-        "list", "multiedit", "webfetch", "plan_enter", "plan_exit", "discover", "plugin", "typescript",
-        "batch", "connector", "lsp", "truncate", "skills_list", "skill_manage",
-        "media",
-      ].includes(item.id)
-      
-      if (!isBuiltin && !sessionTools.hasTool(item.id)) {
+      if (alwaysAvailable.has(item.id)) continue
+
+      if (builtinIDs.has(item.id)) {
+        // Built-in tools (other than always-available) need discovery
+        sessionTools.registerBuiltinTool(item.id)
+      } else if (!sessionTools.hasTool(item.id)) {
+        // Custom tools need discovery
         sessionTools.registerCustomTool(item.id, "plugin")
       }
     }
     
-    // Re-check undiscovered tools after registration
-    const undiscoveredCustomTools = sessionTools.getUndiscoveredCustomTools()
+    // Tools whose discovery has not been activated
+    const undiscoveredTools = sessionTools.getAllUndiscoveredTools()
 
     for (const item of allTools) {
-      // Skip custom tools that haven't been discovered in this session
-      if (undiscoveredCustomTools.includes(item.id)) {
+      // Skip tools that haven't been discovered in this session
+      if (undiscoveredTools.includes(item.id)) {
         continue
       }
 

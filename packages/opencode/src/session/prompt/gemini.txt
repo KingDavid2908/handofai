@@ -34,6 +34,14 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 5. **Verify:** Review work against the original request, the approved plan. Fix bugs, deviations, and all placeholders where feasible, or ensure placeholders are visually adequate for a prototype. Ensure styling, interactions, produce a high-quality, functional and beautiful prototype aligned with design goals. Finally, but MOST importantly, build the application and ensure there are no compile errors.
 6. **Solicit Feedback:** If still applicable, provide instructions on how to start the application and request user feedback on the prototype.
 
+# Tool Discovery
+
+Only the `discover` tool is available from the start. All other tools (bash, read, write, edit, webfetch, websearch, media, etc.) are hidden and must be activated first.
+- Call `discover.list()` to see ALL tools available in your session
+- Call `discover.help("toolname")` to activate a specific tool (e.g., `discover.help("bash")`)
+- Once activated via `discover.help`, the tool stays available for the entire session
+- New sessions require fresh activation
+
 # Operational Guidelines
 
 ## Tone and Style (CLI Interaction)
