@@ -57,6 +57,11 @@ export namespace Log {
     return msg.length
   }
 
+  export function silent() {
+    write = () => 0
+    level = "ERROR" as Level
+  }
+
   export async function init(options: Options) {
     if (options.level) level = options.level
     cleanup(Global.Path.log)

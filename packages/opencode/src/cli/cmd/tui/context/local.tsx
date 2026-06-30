@@ -67,27 +67,46 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.info,
       ])
       const isCompanion = () => agentStore.current === "companion"
+
+      // Pre-compute companion paths (no I/O, just string ops)
+      const companionPaths = (() => {
+        try {
+          const root = path.resolve(import.meta.dirname, "../../../../../")
+          const electronPath = path.join(root, "companion", "node_modules", "electron", "dist",
+            process.platform === "win32" ? "electron.exe" : "electron")
+          const mainPath = path.join(root, "companion", "main.js")
+          return { electronPath, mainPath }
+        } catch { return null }
+      })()
+
+      // Pre-check companion availability in background
+      let companionAvailable = false
+      if (companionPaths) {
+        Promise.all([
+          fs.promises.access(companionPaths.electronPath).then(() => true).catch(() => false),
+          fs.promises.access(companionPaths.mainPath).then(() => true).catch(() => false),
+        ]).then(([e, m]) => { companionAvailable = e && m })
+      }
+
+      let initialMount = true
       createEffect(() => {
         if (isCompanion()) {
+          if (initialMount) {
+            initialMount = false
+            return
+          }
+          if (!companionPaths || !companionAvailable) {
+            fs.appendFileSync(logPath, `${Date.now()} companion SKIP unavailable\n`)
+            return
+          }
           try {
-            const root = path.resolve(import.meta.dirname, "../../../../../")
-            const electronPath = path.join(root, "companion", "node_modules", "electron", "dist",
-              process.platform === "win32" ? "electron.exe" : "electron")
-            const mainPath = path.join(root, "companion", "main.js")
-            const hasElectron = fs.existsSync(electronPath)
-            const hasMain = fs.existsSync(mainPath)
-            if (!hasElectron || !hasMain) {
-              fs.appendFileSync(logPath, `${Date.now()} companion SKIP electron=${hasElectron} main=${hasMain}\n`)
-              return
-            }
-
             const port = new URL(sdk.url).port || "4096"
             const out = fs.openSync(logPath, "a")
-            proc = spawn(electronPath, [mainPath, "--port", port], {
+            proc = spawn(companionPaths.electronPath, [companionPaths.mainPath, "--port", port], {
               stdio: ["ignore", out, out],
               detached: true,
             })
-            fs.writeSync(out, `${Date.now()} companion SPAWN ${electronPath} ${mainPath} port=${port}\n`)
+            fs.writeSync(out, `${Date.now()} companion SPAWN port=${port}\n`)
             proc.on("error", (err) => {
               fs.appendFileSync(logPath, `${Date.now()} companion ERROR ${err.message}\n`)
               proc = null

@@ -36,16 +36,15 @@ export namespace SessionStore {
     const excludeSessionID = opts?.sessionID
     const roleFilters = opts?.roleFilter ?? []
 
-    let results: Array<{
+    const queryDb = async (): Promise<Array<{
       session_id: string
       session_title: string
       project_id: string
       directory: string
       time_created: number
       content: string
-    }>
-    try {
-      results = await Database.Client().all(sql`
+    }>> => {
+      return Database.Client().all(sql`
         SELECT DISTINCT
           s.id as session_id,
           s.title as session_title,
@@ -58,8 +57,26 @@ export namespace SessionStore {
         WHERE part_search MATCH ${query}
         LIMIT 50
       `)
+    }
+
+    let results: Array<{
+      session_id: string
+      session_title: string
+      project_id: string
+      directory: string
+      time_created: number
+      content: string
+    }>
+    try {
+      results = await queryDb()
     } catch {
-      return []
+      // Index may be empty or missing — rebuild once and retry
+      await rebuildIndex()
+      try {
+        results = await queryDb()
+      } catch {
+        return []
+      }
     }
 
     const seen = new Set<string>()

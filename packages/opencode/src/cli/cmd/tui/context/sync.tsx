@@ -30,6 +30,8 @@ import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
 import type { Workspace } from "@opencode-ai/sdk/v2"
 
+const fastBoot = Boolean(process.env.HANDOFAI_FAST_BOOT)
+
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
@@ -356,7 +358,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const args = useArgs()
 
     async function bootstrap() {
-      console.log("bootstrapping")
       const start = Date.now() - 30 * 24 * 60 * 60 * 1000
       const sessionListPromise = sdk.client.session
         .list({ start: start })
@@ -449,6 +450,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         return store.status
       },
       get ready() {
+        if (fastBoot) return true
         return store.status !== "loading"
       },
       session: {

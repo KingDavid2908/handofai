@@ -75,14 +75,24 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       const ctrl = new AbortController()
       sse = ctrl
       ;(async () => {
+        let attempt = 0
         while (true) {
           if (abort.signal.aborted || ctrl.signal.aborted) break
+
+          if (attempt > 0) {
+            const backoff = Math.min(1000 * 2 ** attempt, 10000)
+            await new Promise((r) => setTimeout(r, backoff))
+          }
+
           const events = await sdk.event.subscribe({}, { signal: ctrl.signal })
 
           for await (const event of events.stream) {
+            attempt = 0
             if (ctrl.signal.aborted) break
             handleEvent(event)
           }
+
+          attempt++
 
           if (timer) clearTimeout(timer)
           if (queue.length > 0) flush()

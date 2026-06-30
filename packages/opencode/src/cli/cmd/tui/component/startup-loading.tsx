@@ -2,7 +2,7 @@ import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-j
 import { useTheme } from "../context/theme"
 import { Spinner } from "./spinner"
 
-export function StartupLoading(props: { ready: () => boolean }) {
+export function StartupLoading(props: { ready: () => boolean; skip?: boolean }) {
   const theme = useTheme().theme
   const [show, setShow] = createSignal(false)
   const text = createMemo(() => (props.ready() ? "Finishing startup..." : "Loading plugins..."))
@@ -11,6 +11,11 @@ export function StartupLoading(props: { ready: () => boolean }) {
   let stamp = 0
 
   createEffect(() => {
+    if (props.skip) {
+      if (wait) clearTimeout(wait)
+      if (hold) clearTimeout(hold)
+      return
+    }
     if (props.ready()) {
       if (wait) {
         clearTimeout(wait)

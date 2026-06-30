@@ -38,14 +38,7 @@ export function setupSlots(api: HostPluginApi): HostSlots {
       theme: api.theme,
     },
     {
-      onPluginError(event) {
-        console.error("[tui.slot] plugin error", {
-          plugin: event.pluginId,
-          slot: event.slot,
-          phase: event.phase,
-          source: event.source,
-          message: event.error.message,
-        })
+      onPluginError(_event) {
       },
     },
   )

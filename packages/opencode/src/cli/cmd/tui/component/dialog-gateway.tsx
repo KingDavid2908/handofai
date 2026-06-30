@@ -392,8 +392,7 @@ export function DialogGateway() {
       const data = await Auth.all()
       setAuth(data)
       await updateStatusMap()
-    } catch (err) {
-      console.error("Auth refresh failed:", err)
+    } catch {
       toast.show({ message: "Failed to refresh auth status", variant: "error" })
     }
   }

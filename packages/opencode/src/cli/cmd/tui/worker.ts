@@ -1,6 +1,8 @@
-import { Installation } from "@/installation"
-import { Server } from "@/server/server"
 import { Log } from "@/util/log"
+Log.silent()
+
+import { Server } from "@/server/server"
+
 import { getWorkingDirectory } from "@/util/working-directory"
 import { Instance } from "@/project/instance"
 import { InstanceBootstrap } from "@/project/bootstrap"
@@ -13,28 +15,13 @@ import type { Event } from "@opencode-ai/sdk/v2"
 import { Flag } from "@/flag/flag"
 import { setTimeout as sleep } from "node:timers/promises"
 import { writeHeapSnapshot } from "node:v8"
-import { WorkspaceID } from "@/control-plane/schema"
 
-await Log.init({
-  print: process.argv.includes("--print-logs"),
-  dev: Installation.isLocal(),
-  level: (() => {
-    if (Installation.isLocal()) return "DEBUG"
-    return "INFO"
-  })(),
-})
+const onUnhandledRejection = (_error: unknown) => {}
 
-process.on("unhandledRejection", (e) => {
-  Log.Default.error("rejection", {
-    e: e instanceof Error ? e.message : e,
-  })
-})
+const onUncaughtException = (_error: Error) => {}
 
-process.on("uncaughtException", (e) => {
-  Log.Default.error("exception", {
-    e: e instanceof Error ? e.message : e,
-  })
-})
+process.on("unhandledRejection", onUnhandledRejection)
+process.on("uncaughtException", onUncaughtException)
 
 // Subscribe to global events and forward them via RPC
 GlobalBus.on("event", (event) => {
@@ -42,6 +29,14 @@ GlobalBus.on("event", (event) => {
 })
 
 let server: Awaited<ReturnType<typeof Server.listen>> | undefined
+
+let bootstrapped = false
+
+const bootstrapOnDemand = async (dir: string) => {
+  if (bootstrapped) return
+  bootstrapped = true
+  await Instance.provide({ directory: dir, init: InstanceBootstrap, fn: () => {} }).catch(() => {})
+}
 
 const eventStream = {
   abort: undefined as AbortController | undefined,
@@ -57,7 +52,6 @@ const startEventStream = (input: { directory: string; workspaceID?: string }) =>
     while (!signal.aborted) {
       const shouldReconnect = await Instance.provide({
         directory: input.directory,
-        init: InstanceBootstrap,
         fn: () =>
           new Promise<boolean>((resolve) => {
             Rpc.emit("event", {
@@ -87,12 +81,7 @@ const startEventStream = (input: { directory: string; workspaceID?: string }) =>
 
             signal.addEventListener("abort", onAbort, { once: true })
           }),
-      }).catch((error) => {
-        Log.Default.error("event stream subscribe error", {
-          error: error instanceof Error ? error.message : error,
-        })
-        return false
-      })
+      }).catch(() => false)
 
       if (!shouldReconnect || signal.aborted) {
         break
@@ -102,14 +91,11 @@ const startEventStream = (input: { directory: string; workspaceID?: string }) =>
         await sleep(250)
       }
     }
-  })().catch((error) => {
-    Log.Default.error("event stream error", {
-      error: error instanceof Error ? error.message : error,
-    })
-  })
+  })().catch(() => {})
 }
 
-startEventStream({ directory: getWorkingDirectory() })
+// Defer startEventStream so RPC listener is fully set up first
+setTimeout(() => startEventStream({ directory: getWorkingDirectory() }), 0).unref?.()
 
 export const rpc = {
   async fetch(input: { url: string; method: string; headers: Record<string, string>; body?: string }) {
@@ -141,13 +127,8 @@ export const rpc = {
     return { url: server.url.toString() }
   },
   async checkUpgrade(input: { directory: string }) {
-    await Instance.provide({
-      directory: input.directory,
-      init: InstanceBootstrap,
-      fn: async () => {
-        await upgrade().catch(() => {})
-      },
-    })
+    await bootstrapOnDemand(input.directory)
+    await upgrade().catch(() => {})
   },
   async reload() {
     await Config.invalidate(true)
@@ -156,7 +137,6 @@ export const rpc = {
     startEventStream({ directory: getWorkingDirectory(), workspaceID: input.workspaceID })
   },
   async shutdown() {
-    Log.Default.info("worker shutting down")
     if (eventStream.abort) eventStream.abort.abort()
     await Instance.disposeAll()
     if (server) await server.stop(true)

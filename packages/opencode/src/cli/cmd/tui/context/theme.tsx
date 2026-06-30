@@ -330,17 +330,20 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     function init() {
-      Promise.allSettled([
-        resolveSystemTheme(store.mode),
-        getCustomThemes()
-          .then((custom) => {
-            customThemes = custom
-            syncThemes()
-          })
-          .catch(() => {
-            setStore("active", "opencode")
-          }),
-      ]).finally(() => {
+      const promises: Promise<unknown>[] = [resolveSystemTheme(store.mode)]
+      if (!process.env.HANDOFAI_FAST_BOOT) {
+        promises.push(
+          getCustomThemes()
+            .then((custom) => {
+              customThemes = custom
+              syncThemes()
+            })
+            .catch(() => {
+              setStore("active", "opencode")
+            }),
+        )
+      }
+      Promise.allSettled(promises).finally(() => {
         setStore("ready", true)
       })
     }

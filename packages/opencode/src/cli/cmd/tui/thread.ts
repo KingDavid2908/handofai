@@ -5,16 +5,13 @@ import { type rpc } from "./worker"
 import path from "path"
 import { fileURLToPath } from "url"
 import { UI } from "@/cli/ui"
-import { Log } from "@/util/log"
-import { errorMessage } from "@/util/error"
 import { withTimeout } from "@/util/timeout"
 import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 import { Filesystem } from "@/util/filesystem"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
-import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
-import { TuiConfig } from "@/config/tui"
-import { Instance } from "@/project/instance"
+import { win32InstallCtrlCGuard } from "./win32"
+
 import { getWorkingDirectory } from "@/util/working-directory"
 import { writeHeapSnapshot } from "v8"
 
@@ -106,10 +103,6 @@ export const TuiThreadCommand = cmd({
     // (Important when running under `bun run` wrappers on Windows.)
     const unguard = win32InstallCtrlCGuard()
     try {
-      // Must be the very first thing — disables CTRL_C_EVENT before any Worker
-      // spawn or async work so the OS cannot kill the process group.
-      win32DisableProcessedInput()
-
       if (args.fork && !args.continue && !args.session) {
         UI.error("--fork requires --continue or --session")
         process.exitCode = 1
@@ -129,46 +122,21 @@ export const TuiThreadCommand = cmd({
       }
       const cwd = Filesystem.resolve(process.cwd())
 
-      const worker = new Worker(file, {
-        env: Object.fromEntries(
-          Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-        ),
-      })
-      worker.onerror = (e) => {
-        Log.Default.error(e)
-      }
+      const worker = new Worker(file)
 
       const client = Rpc.client<typeof rpc>(worker)
-      const error = (e: unknown) => {
-        Log.Default.error(e)
-      }
-      const reload = () => {
-        client.call("reload", undefined).catch((err) => {
-          Log.Default.warn("worker reload failed", {
-            error: errorMessage(err),
-          })
-        })
-      }
-      process.on("uncaughtException", error)
-      process.on("unhandledRejection", error)
-      process.on("SIGUSR2", reload)
 
       let stopped = false
       const stop = async () => {
         if (stopped) return
         stopped = true
-        process.off("uncaughtException", error)
-        process.off("unhandledRejection", error)
-        process.off("SIGUSR2", reload)
-        await withTimeout(client.call("shutdown", undefined), 5000).catch((error) => {
-          Log.Default.warn("worker shutdown failed", {
-            error: errorMessage(error),
-          })
-        })
+        await withTimeout(client.call("shutdown", undefined), 5000).catch(() => {})
         worker.terminate()
       }
 
       const prompt = await input(args.prompt)
+      const { Instance } = await import("@/project/instance")
+      const { TuiConfig } = await import("@/config/tui")
       const config = await Instance.provide({
         directory: cwd,
         fn: () => TuiConfig.get(),

@@ -48,9 +48,6 @@ import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { VoiceProvider, useVoice } from "./context/voice"
-import { VoiceParticipant } from "@/voice/rtc-participant"
-import { synthesizeWithLiveKit, synthesizeWithOpenAICompatible, synthesizeWithYarnGPT } from "@/tool/voice"
-import { ModelsDev } from "@/provider/models"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -70,68 +67,6 @@ import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
 import { createTuiApi, TuiPluginRuntime, type RouteMap } from "./plugin"
 import { FormatError, FormatUnknownError } from "@/cli/error"
-import { MemoryStore } from "@/memory/memory-store"
-import { SessionStore } from "@/memory/session-store"
-
-async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
-  // can't set raw mode if not a TTY
-  if (!process.stdin.isTTY) return "dark"
-
-  return new Promise((resolve) => {
-    let timeout: NodeJS.Timeout
-
-    const cleanup = () => {
-      process.stdin.setRawMode(false)
-      process.stdin.removeListener("data", handler)
-      clearTimeout(timeout)
-    }
-
-    const handler = (data: Buffer) => {
-      const str = data.toString()
-      const match = str.match(/\x1b]11;([^\x07\x1b]+)/)
-      if (match) {
-        cleanup()
-        const color = match[1]
-        // Parse RGB values from color string
-        // Formats: rgb:RR/GG/BB or #RRGGBB or rgb(R,G,B)
-        let r = 0,
-          g = 0,
-          b = 0
-
-        if (color.startsWith("rgb:")) {
-          const parts = color.substring(4).split("/")
-          r = parseInt(parts[0], 16) >> 8 // Convert 16-bit to 8-bit
-          g = parseInt(parts[1], 16) >> 8 // Convert 16-bit to 8-bit
-          b = parseInt(parts[2], 16) >> 8 // Convert 16-bit to 8-bit
-        } else if (color.startsWith("#")) {
-          r = parseInt(color.substring(1, 3), 16)
-          g = parseInt(color.substring(3, 5), 16)
-          b = parseInt(color.substring(5, 7), 16)
-        } else if (color.startsWith("rgb(")) {
-          const parts = color.substring(4, color.length - 1).split(",")
-          r = parseInt(parts[0])
-          g = parseInt(parts[1])
-          b = parseInt(parts[2])
-        }
-
-        // Calculate luminance using relative luminance formula
-        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-
-        // Determine if dark or light based on luminance threshold
-        resolve(luminance > 0.5 ? "light" : "dark")
-      }
-    }
-
-    process.stdin.setRawMode(true)
-    process.stdin.on("data", handler)
-    process.stdout.write("\x1b]11;?\x07")
-
-    timeout = setTimeout(() => {
-      cleanup()
-      resolve("dark")
-    }, 1000)
-  })
-}
 
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
@@ -148,9 +83,7 @@ function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
     consoleOptions: {
       keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
       onCopySelection: (text) => {
-        Clipboard.copy(text).catch((error) => {
-          console.error(`Failed to copy console selection to clipboard: ${error}`)
-        })
+        Clipboard.copy(text).catch(() => {})
       },
     },
   }
@@ -190,11 +123,10 @@ export function tui(input: {
     const unguard = win32InstallCtrlCGuard()
     win32DisableProcessedInput()
 
-    const mode = await getTerminalBackgroundColor()
-
-    // Re-clear after getTerminalBackgroundColor() — setRawMode(false) restores
-    // the original console mode which re-enables ENABLE_PROCESSED_INPUT.
-    win32DisableProcessedInput()
+    const renderer = await createCliRenderer(rendererConfig(input.config))
+    // Prewarm palette so ThemeProvider avoids a first-paint fallback flash
+    void renderer.getPalette({ size: 16 }).catch(() => undefined)
+    const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
 
     const onExit = async () => {
       unguard?.()
@@ -204,11 +136,6 @@ export function tui(input: {
     const onBeforeExit = async () => {
       await TuiPluginRuntime.dispose()
     }
-
-    const renderer = await createCliRenderer(rendererConfig(input.config))
-
-    await MemoryStore.init().catch((e) => console.error("Failed to init MemoryStore:", e))
-    void SessionStore.rebuildIndex().catch((e) => console.error("Failed to rebuild session index:", e))
 
     await render(() => {
       return (
@@ -308,38 +235,17 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   onCleanup(() => {
     api.dispose()
   })
-  const [ready, setReady] = createSignal(false)
+  const fastBoot = Boolean(process.env.HANDOFAI_FAST_BOOT)
+  const [ready, setReady] = createSignal(fastBoot)
   TuiPluginRuntime.init(api)
-    .catch((error) => {
-      console.error("Failed to load TUI plugins", error)
-    })
+    .catch(() => {})
     .finally(() => {
       setReady(true)
     })
 
-  // Voice mode toggle (works on all screens including home/new-session)
-  useKeyboard((evt) => {
-    if (dialog.stack.length > 0) return
-    if (keybind.match("voice_toggle", evt)) {
-      evt.preventDefault()
-      const vc = (sync.data.config as any).voice
-      const current = vc?.mode || "off"
-      const next = current === "off" ? "stt_only" : "off"
-      const label = next === "off" ? "Voice: OFF" : "Voice: ON"
-      Config.updateGlobal({ voice: { ...(vc || {}), mode: next } })
-        .then((updated) => {
-          sync.set("config", reconcile(updated))
-        })
-        .catch((err) => {
-          toast.show({ message: `Voice toggle failed: ${err.message}`, variant: "error", duration: 3000 })
-        })
-      toast.show({ message: label, variant: "info", duration: 2000 })
-    }
-  })
-
   // -- Voice participant management (works on ALL routes including home) --
   const voice = useVoice()
-  let voiceParticipant: VoiceParticipant | null = null
+  let voiceParticipant: any = null
   let voiceGen = 0
   let prevVoiceMode = "off"
 
@@ -361,46 +267,64 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     }
 
     if (mode === "stt_only") {
-      voiceParticipant?.disconnect()
-      voiceParticipant = new VoiceParticipant()
       const gen = ++voiceGen
       voice.setActive(true)
       dialog.clear()
-      voiceParticipant.connectSttOnly(vc, {
-        onTranscript: (text, isFinal) => {
-          if (gen !== voiceGen) return
-          promptRef.current?.set?.({ input: text, parts: [] })
-        },
-        onUserSpeaking: () => { if (gen !== voiceGen) return },
-        onError: (msg) => {
+      import("@/voice/rtc-participant").then(({ VoiceParticipant }) => {
+        if (gen !== voiceGen) return
+        const vp = new VoiceParticipant()
+        voiceParticipant = vp
+        vp.connectSttOnly(vc, {
+          onTranscript: (text, isFinal) => {
+            if (gen !== voiceGen) return
+            promptRef.current?.set?.({ input: text, parts: [] })
+          },
+          onUserSpeaking: () => { if (gen !== voiceGen) return },
+          onError: (msg) => {
+            if (gen !== voiceGen) return
+            voice.setActive(false)
+            toast.show({ message: msg, variant: "error", duration: 3000 })
+          },
+        }).catch((err) => {
           if (gen !== voiceGen) return
           voice.setActive(false)
-          toast.show({ message: msg, variant: "error", duration: 3000 })
-        },
-      }).catch((err) => {
-        if (gen !== voiceGen) return
-        voice.setActive(false)
-        toast.show({ message: `Voice connection failed: ${err.message}`, variant: "error", duration: 3000 })
-        voiceParticipant = null
+          toast.show({ message: `Voice connection failed: ${err.message}`, variant: "error", duration: 3000 })
+          voiceParticipant = null
+        })
       })
     }
   })
 
+  // Combined keyboard handler for voice toggle and copy-on-select
   useKeyboard((evt) => {
+    // Voice mode toggle
+    if (dialog.stack.length === 0 && keybind.match("voice_toggle", evt)) {
+      evt.preventDefault()
+      const vc = (sync.data.config as any).voice
+      const current = vc?.mode || "off"
+      const next = current === "off" ? "stt_only" : "off"
+      const label = next === "off" ? "Voice: OFF" : "Voice: ON"
+      Config.updateGlobal({ voice: { ...(vc || {}), mode: next } })
+        .then((updated) => {
+          sync.set("config", reconcile(updated))
+        })
+        .catch((err) => {
+          toast.show({ message: `Voice toggle failed: ${err.message}`, variant: "error", duration: 3000 })
+        })
+      toast.show({ message: label, variant: "info", duration: 2000 })
+      return
+    }
+
+    // Copy-on-select handling
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
     const sel = renderer.getSelection()
     if (!sel) return
 
-    // Windows Terminal-like behavior:
-    // - Ctrl+C copies and dismisses selection
-    // - Esc dismisses selection
-    // - Most other key input dismisses selection and is passed through
     if (evt.ctrl && evt.name === "c") {
       if (!Selection.copy(renderer, toast)) {
         renderer.clearSelection()
         return
       }
-
       evt.preventDefault()
       evt.stopPropagation()
       return
@@ -1030,7 +954,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       </Show>
       {plugin()}
       <TuiPluginRuntime.Slot name="app" />
-      <StartupLoading ready={ready} />
+      {!fastBoot && <StartupLoading ready={ready} />}
     </box>
   )
 }
