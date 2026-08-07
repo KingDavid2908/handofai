@@ -119,7 +119,7 @@ export function DialogOpenAICompatible() {
   }
 
   const saveAndConnect = async (selectedModel: string) => {
-    const providerID = `${providerName()}:${selectedModel}`
+    const providerID = providerName()
     const normalizedBaseURL = baseURL().replace(/\/+$/, "")
     const modelConfig: Record<string, any> = {}
     for (const m of models()) {
